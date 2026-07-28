@@ -1,0 +1,8 @@
+{
+  "name": "space-x-game",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo \"Static assets are already built. Run 'python build_web.py' locally to regenerate them.\""
+  }
+}
