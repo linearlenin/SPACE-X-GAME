@@ -123,7 +123,7 @@ POINTS_PER_HIT = 10
 # -----------------------------
 # Works on desktop and mobile with pygbag
 window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Archery Game")
+pygame.display.set_caption("Space X")
 screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 window_width, window_height = SCREEN_WIDTH, SCREEN_HEIGHT
 clock = pygame.time.Clock()
