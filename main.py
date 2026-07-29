@@ -631,35 +631,35 @@ def main_loop():
         # Attempt to load sound effect files from audio/ directory. If a file is
         # missing or cannot be loaded a warning will be printed and the game
         # continues with that sound omitted.
-        try:
-            shoot_path = os.path.join('audio', 'shoot.wav')
-            if os.path.exists(shoot_path):
-                shoot_sound = pygame.mixer.Sound(shoot_path)
-            else:
-                print(f"Warning: {shoot_path} not found. Shoot sound disabled.")
-        except Exception:
-            shoot_sound = None
-            print("Warning: failed to load shoot sound")
+        import wave
 
-        try:
-            hit_path = os.path.join('audio', 'hit.wav')
-            if os.path.exists(hit_path):
-                hit_sound = pygame.mixer.Sound(hit_path)
-            else:
-                print(f"Warning: {hit_path} not found. Hit sound disabled.")
-        except Exception:
-            hit_sound = None
-            print("Warning: failed to load hit sound")
+        def _ensure_sound(path, name):
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+            except Exception:
+                pass
+            try:
+                if not os.path.exists(path):
+                    # Create a short (0.1s) silent WAV placeholder so the mixer can load it
+                    try:
+                        frames = int(0.1 * 22050)
+                        with wave.open(path, 'wb') as wf:
+                            wf.setnchannels(1)
+                            wf.setsampwidth(2)
+                            wf.setframerate(22050)
+                            wf.writeframes(b'\x00\x00' * frames)
+                        print(f"Info: created placeholder sound '{path}'")
+                    except Exception:
+                        print(f"Warning: could not create placeholder for {path}")
+                        return None
+                return pygame.mixer.Sound(path)
+            except Exception:
+                print(f"Warning: failed to load {name} sound")
+                return None
 
-        try:
-            miss_path = os.path.join('audio', 'miss.wav')
-            if os.path.exists(miss_path):
-                miss_sound = pygame.mixer.Sound(miss_path)
-            else:
-                print(f"Warning: {miss_path} not found. Miss sound disabled.")
-        except Exception:
-            miss_sound = None
-            print("Warning: failed to load miss sound")
+        shoot_sound = _ensure_sound(os.path.join('audio', 'shoot.wav'), 'shoot')
+        hit_sound = _ensure_sound(os.path.join('audio', 'hit.wav'), 'hit')
+        miss_sound = _ensure_sound(os.path.join('audio', 'miss.wav'), 'miss')
 
         # Background music disabled per user request — only sound effects (SFX) will be used.
         # Background music loading/playback removed to avoid disturbance.
