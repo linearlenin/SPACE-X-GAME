@@ -1,4 +1,34 @@
-<html lang="en-us"><script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer><!--
+<html lang="en-us">
+<script>
+(function(){
+    const orig = {
+        log: console.log.bind(console),
+        info: console.info.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console)
+    };
+    const filters = [
+        /installHook\.js/, /bus\(\d+\)/, /Unsupported device pixel ratio/, /Connection:/,
+        /== FLAGS :/, /terminal \d+ \d+/, /NO ume unlocker/, /TODO: user defined canvas/,
+        /Loading python interpreter/, /ScriptProcessorNode is deprecated/, /vtx font:/, /VM\.prerun/, /VM\.postrun/
+    ];
+    function shouldFilter(args) {
+        try {
+            const s = args.map(a => typeof a === 'string' ? a : (a && a.toString ? a.toString() : JSON.stringify(a))).join(' ');
+            return filters.some(re => re.test(s));
+        } catch (e) {
+            return false;
+        }
+    }
+    ['log', 'info', 'warn', 'error'].forEach(fn => {
+        console[fn] = function(...args) {
+            if (shouldFilter(args)) return;
+            orig[fn].apply(console, args);
+        };
+    });
+})();
+</script>
+<script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer><!--
 
 print("""
 Loading space-x-game from space-x-game.apk
@@ -347,9 +377,9 @@ width="470px" height="90%"
 allowtransparency="true"
 style="z-index: 10; background: #FFFFFF;"
 frameborder="1"
-                sandbox="allow-same-origin allow-top-navigation allow-scripts allow-pointer-lock"
-                allow="autoplay; fullscreen *; geolocation; microphone; camera; midi; xr-spatial-tracking; gamepad; gyroscope; accelerometer; cross-origin-isolated"
-                src="https://pygame-web.github.io/cdn/0.9.3/empty.html"
+                sandbox="allow-scripts allow-pointer-lock"
+                allow="autoplay; fullscreen; microphone; camera; gamepad; gyroscope; accelerometer"
+                src="empty.html"
                 scrolling="yes">
             </iframe>
         </div>

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Space X iframe helper</title>
+    <script>
+    (function(){
+        const orig = {
+            log: console.log.bind(console),
+            info: console.info.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console)
+        };
+        const filters = [
+            /installHook\.js/, /bus\(\d+\)/, /Unsupported device pixel ratio/, /Connection:/,
+            /== FLAGS :/, /terminal \d+ \d+/, /NO ume unlocker/, /TODO: user defined canvas/,
+            /Loading python interpreter/, /ScriptProcessorNode is deprecated/, /vtx font:/, /VM\.prerun/, /VM\.postrun/
+        ];
+        function shouldFilter(args) {
+            try {
+                const s = args.map(a => typeof a === 'string' ? a : (a && a.toString ? a.toString() : JSON.stringify(a))).join(' ');
+                return filters.some(re => re.test(s));
+            } catch (e) {
+                return false;
+            }
+        }
+        ['log', 'info', 'warn', 'error'].forEach(fn => {
+            console[fn] = function(...args) {
+                if (shouldFilter(args)) return;
+                orig[fn].apply(console, args);
+            };
+        });
+    })();
+    </script>
+</head>
+<body></body>
+</html>
