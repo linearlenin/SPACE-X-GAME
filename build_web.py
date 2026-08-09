@@ -29,8 +29,19 @@ def build_web():
         if source_file is None:
             raise FileNotFoundError(f"Expected build artifact not found in any candidate location: {filename}\nTried: {candidates}")
         dest_file = PUBLIC / filename
-        shutil.copy2(source_file, dest_file)
-        print(f"Copied {source_file} -> {dest_file}")
+        # If source and destination are the same file, skip copying to avoid SameFileError
+        try:
+            if source_file.resolve() == dest_file.resolve():
+                print(f"Source and destination are the same ({source_file}), skipping copy")
+            else:
+                shutil.copy2(source_file, dest_file)
+                print(f"Copied {source_file} -> {dest_file}")
+        except Exception as e:
+            # Protect against races or permission errors; raise if it's not a SameFileError
+            if isinstance(e, shutil.SameFileError):
+                print(f"shutil.SameFileError for {source_file} -> {dest_file}, skipping")
+            else:
+                raise
 
     print(f"Public web assets copied to {PUBLIC}")
 
