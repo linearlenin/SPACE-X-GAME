@@ -371,7 +371,9 @@ frameborder="1"
     (function(){
         const orig = { log: console.log.bind(console), info: console.info.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
         const filters = [
-            /installHook\.js/, /bus\(\d+\)/, /Unsupported device pixel ratio/, /Connection:/, /VM\.prerun/, /VM\.postrun/, /vtx font:/
+            /installHook\.js/, /bus\(\d+\)/, /Unsupported device pixel ratio/, /Connection:/,
+            /== FLAGS :/, /terminal \d+ \d+/, /NO ume unlocker/, /TODO: user defined canvas/, /Loading python interpreter/,
+            /ScriptProcessorNode is deprecated/, /vtx font:/, /VM\.prerun/, /VM\.postrun/
         ];
         function shouldFilter(args){
             try{
@@ -388,14 +390,12 @@ frameborder="1"
     <script type="application/javascript">
 
     globalThis.__canvas_resized = (self, ecw, ech) => {
-        console.warn("TODO: panda3d canvas monitor", self, ecw, ech)
+        // Runtime canvas resize callback; no noisy console output needed for normal game operation.
     }
-
+ 
     async function custom_onload(debug_hidden) {
         // this is called before anything python is loaded
         // make your js customization here
-        console.log(__FILE__, "custom_onload")
-
         pyconsole.hidden = debug_hidden
         system.hidden = debug_hidden
         transfer.hidden = debug_hidden
@@ -407,14 +407,13 @@ frameborder="1"
 
     function custom_prerun(){
         // no python main and no (MEMFS + VFS) yet.
-        console.log(__FILE__, "custom_prerun")
-
+        // custom prerun hook; no debug output required for normal operation
     }
-
+ 
     function custom_postrun(){
         // python main and no VFS filesystem yet.
-        console.log(__FILE__, "custom_postrun")
-
+        // custom postrun hook; no debug output required for normal operation
+ 
     }
 
     function debug() {
