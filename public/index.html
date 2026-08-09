@@ -345,13 +345,8 @@ height="720px"
             <iframe id="iframe" class="framed" name="iframe"
 width="470px" height="90%"
 allowtransparency="true"
-style="z-index: 10;"
-style="background: #FFFFFF;"
+style="z-index: 10; background: #FFFFFF;"
 frameborder="1"
-                allowfullscreen="true"
-                webkitallowfullscreen="true"
-                msallowfullscreen="true"
-                mozallowfullscreen="true"
                 sandbox="allow-same-origin allow-top-navigation allow-scripts allow-pointer-lock"
                 allow="autoplay; fullscreen *; geolocation; microphone; camera; midi; xr-spatial-tracking; gamepad; gyroscope; accelerometer; cross-origin-isolated"
                 src="https://pygame-web.github.io/cdn/0.9.3/empty.html"
@@ -371,6 +366,25 @@ frameborder="1"
         <div id="terminal" tabIndex=1 align="left"></div>
     </div>
 
+    <script>
+    // Filter noisy runtime logs from embedded runtime while keeping useful warnings/errors.
+    (function(){
+        const orig = { log: console.log.bind(console), info: console.info.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
+        const filters = [
+            /installHook\.js/, /bus\(\d+\)/, /Unsupported device pixel ratio/, /Connection:/, /VM\.prerun/, /VM\.postrun/, /vtx font:/
+        ];
+        function shouldFilter(args){
+            try{
+                const s = args.map(a => typeof a === 'string' ? a : (a && a.toString ? a.toString() : JSON.stringify(a))).join(' ');
+                return filters.some(re => re.test(s));
+            } catch(e){ return false; }
+        }
+        ['log','info','warn','error'].forEach(fn => {
+            console[fn] = function(...args){ if (shouldFilter(args)) return; orig[fn].apply(console, args); };
+        });
+    })();
+
+    </script>
     <script type="application/javascript">
 
     globalThis.__canvas_resized = (self, ecw, ech) => {
