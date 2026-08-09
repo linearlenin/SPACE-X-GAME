@@ -19,11 +19,18 @@ def build_web():
     PUBLIC.mkdir(exist_ok=True)
 
     for filename in REQUIRED_FILES:
-        source_file = BUILD_WEB / filename
+        # Try several locations where pygbag or the repo might have placed the artifact
+        candidates = [BUILD_WEB / filename, SOURCE / filename, SOURCE / "public" / filename]
+        source_file = None
+        for c in candidates:
+            if c.is_file():
+                source_file = c
+                break
+        if source_file is None:
+            raise FileNotFoundError(f"Expected build artifact not found in any candidate location: {filename}\nTried: {candidates}")
         dest_file = PUBLIC / filename
-        if not source_file.is_file():
-            raise FileNotFoundError(f"Expected build artifact not found: {source_file}")
         shutil.copy2(source_file, dest_file)
+        print(f"Copied {source_file} -> {dest_file}")
 
     print(f"Public web assets copied to {PUBLIC}")
 
