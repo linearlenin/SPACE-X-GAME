@@ -150,7 +150,6 @@ def window_to_game_coords(x, y):
 # the game will continue but sounds won't play.
 shoot_sound = None  # sound played when firing an arrow
 hit_sound = None    # sound played when an arrow hits a target
-miss_sound = None   # sound played when arrow goes off-screen
 bg_music_loaded = False  # True if background music was successfully loaded
 
 # -----------------------------
@@ -631,56 +630,41 @@ def main_loop():
         # Attempt to load sound effect files from audio/ directory. If a file is
         # missing or cannot be loaded a warning will be printed and the game
         # continues with that sound omitted.
-        try:
-            shoot_path = os.path.join('audio', 'shoot.wav')
-            if os.path.exists(shoot_path):
-                shoot_sound = pygame.mixer.Sound(shoot_path)
-            else:
-                print(f"Warning: {shoot_path} not found. Shoot sound disabled.")
-        except Exception:
-            shoot_sound = None
-            print("Warning: failed to load shoot sound")
+        import wave
 
-        try:
-            hit_path = os.path.join('audio', 'hit.wav')
-            if os.path.exists(hit_path):
-                hit_sound = pygame.mixer.Sound(hit_path)
-            else:
-                print(f"Warning: {hit_path} not found. Hit sound disabled.")
-        except Exception:
-            hit_sound = None
-            print("Warning: failed to load hit sound")
-
-        try:
-            miss_path = os.path.join('audio', 'miss.wav')
-            # Ensure audio directory exists
-            audio_dir = os.path.dirname(miss_path)
-            if audio_dir and not os.path.exists(audio_dir):
-                os.makedirs(audio_dir, exist_ok=True)
-            if not os.path.exists(miss_path):
-                # Create a small silent WAV placeholder (~50ms) so missing-file warnings do not occur
-                try:
-                    import wave
-                    duration_ms = 50
-                    sr = 22050
-                    n_frames = int(sr * duration_ms / 1000)
-                    with wave.open(miss_path, 'w') as wf:
-                        wf.setnchannels(1)
-                        wf.setsampwidth(2)
-                        wf.setframerate(sr)
-                        silence = (0).to_bytes(2, byteorder='little', signed=True)
-                        wf.writeframes(silence * n_frames)
-                except Exception:
-                    # Fallback: create an empty file to avoid file-not-found
-                    try:
-                        open(miss_path, 'wb').close()
-                    except Exception:
-                        pass
+        def _ensure_sound(path, name):
             try:
-                miss_sound = pygame.mixer.Sound(miss_path)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
             except Exception:
-                miss_sound = None
-                print(f"Warning: failed to load miss sound from {miss_path}")
+                pass
+            try:
+                if not os.path.exists(path):
+                    # Create a short (0.1s) silent WAV placeholder so the mixer can load it
+                    try:
+                        frames = int(0.1 * 22050)
+                        with wave.open(path, 'wb') as wf:
+                            wf.setnchannels(1)
+                            wf.setsampwidth(2)
+                            wf.setframerate(22050)
+                            wf.writeframes(b'\x00\x00' * frames)
+                        print(f"Info: created placeholder sound '{path}'")
+                    except Exception:
+                        print(f"Warning: could not create placeholder for {path}")
+                        return None
+                return pygame.mixer.Sound(path)
+            except Exception:
+                print(f"Warning: failed to load {name} sound")
+                return None
+
+<<<<<<< HEAD
+        # Use helper to create/load placeholder SFX for shoot, hit and miss
+        shoot_sound = _ensure_sound(os.path.join('audio', 'shoot.wav'), 'shoot')
+        hit_sound = _ensure_sound(os.path.join('audio', 'hit.wav'), 'hit')
+        miss_sound = _ensure_sound(os.path.join('audio', 'miss.wav'), 'miss')
+=======
+        shoot_sound = _ensure_sound(os.path.join('audio', 'shoot.wav'), 'shoot')
+        hit_sound = _ensure_sound(os.path.join('audio', 'hit.wav'), 'hit')
+>>>>>>> 711fe77758ca7eae729dfa818f7f178341f4b408
 
         # Background music disabled per user request — only sound effects (SFX) will be used.
         # Background music loading/playback removed to avoid disturbance.
@@ -822,11 +806,6 @@ def main_loop():
                 arrow.update()
                 if not arrow.alive:
                     # Arrow expired or went off-screen: play miss sound if enabled
-                    if state.get('sound_enabled', True) and miss_sound:
-                        try:
-                            miss_sound.play()
-                        except Exception:
-                            print("Warning: failed to play miss sound")
                     try:
                         state['arrows'].remove(arrow)
                     except ValueError:
