@@ -150,6 +150,7 @@ def window_to_game_coords(x, y):
 # the game will continue but sounds won't play.
 shoot_sound = None  # sound played when firing an arrow
 hit_sound = None    # sound played when an arrow hits a target
+miss_sound = None   # sound played when arrow goes off-screen
 bg_music_loaded = False  # True if background music was successfully loaded
 
 # -----------------------------
@@ -608,7 +609,7 @@ def main_loop():
     file is missing, a warning is printed but the game continues without that
     audio feature.
     """
-    global shoot_sound, hit_sound, bg_music_loaded, WIND, window, window_width, window_height
+    global shoot_sound, hit_sound, miss_sound, bg_music_loaded, WIND, window, window_width, window_height
 
     running = True
 
@@ -656,15 +657,10 @@ def main_loop():
                 print(f"Warning: failed to load {name} sound")
                 return None
 
-<<<<<<< HEAD
         # Use helper to create/load placeholder SFX for shoot, hit and miss
         shoot_sound = _ensure_sound(os.path.join('audio', 'shoot.wav'), 'shoot')
         hit_sound = _ensure_sound(os.path.join('audio', 'hit.wav'), 'hit')
         miss_sound = _ensure_sound(os.path.join('audio', 'miss.wav'), 'miss')
-=======
-        shoot_sound = _ensure_sound(os.path.join('audio', 'shoot.wav'), 'shoot')
-        hit_sound = _ensure_sound(os.path.join('audio', 'hit.wav'), 'hit')
->>>>>>> 711fe77758ca7eae729dfa818f7f178341f4b408
 
         # Background music disabled per user request — only sound effects (SFX) will be used.
         # Background music loading/playback removed to avoid disturbance.
