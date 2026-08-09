@@ -1,0 +1,30 @@
+name: Preview Playwright Monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # every 15 minutes
+  workflow_dispatch: {}
+
+jobs:
+  playwright-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright --no-audit --no-fund
+          npx playwright install --with-deps
+
+      - name: Run preview check
+        env:
+          PREVIEW_URL: https://space-x-game-git-agents-fix-html-t-0905d7-linearlenins-projects.vercel.app/
+        run: |
+          node .github/scripts/check-preview.js "$PREVIEW_URL"
