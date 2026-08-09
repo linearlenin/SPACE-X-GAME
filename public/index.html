@@ -475,6 +475,79 @@ frameborder="1"
         window.frames["iframe"].location = url;
     }
 
+    // --- mobile touch controls overlay ---
+    // Adds on-screen buttons that synthesize keyboard events targeted at the game canvas
+    (function(){
+        const css = `
+        .touch-controls { position: fixed; left: 0; right: 0; bottom: 6vh; height: 18vh; display: flex; align-items: center; justify-content: space-between; pointer-events: none; z-index: 99999; }
+        .touch-group { display:flex; gap: 2vw; padding: 0 4vw; pointer-events: auto; }
+        .btn { width: 16vw; max-width:80px; height: 12vh; max-height:64px; background: rgba(0,0,0,0.45); color: #fff; border-radius: 12px; display:flex; align-items:center; justify-content:center; font-weight:600; user-select:none; -webkit-user-select:none; }
+        .btn:active { background: rgba(255,255,255,0.15); }
+        @media (orientation: landscape) { .touch-controls { bottom: 3vh; height: 14vh }}
+        `;
+        const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+
+        // create overlay
+        const overlay = document.createElement('div'); overlay.className = 'touch-controls';
+        const leftGroup = document.createElement('div'); leftGroup.className = 'touch-group';
+        const rightGroup = document.createElement('div'); rightGroup.className = 'touch-group';
+
+        const btnLeft = document.createElement('div'); btnLeft.className='btn'; btnLeft.id='touch-left'; btnLeft.innerText='◀';
+        const btnRight = document.createElement('div'); btnRight.className='btn'; btnRight.id='touch-right'; btnRight.innerText='▶';
+        const btnThrust = document.createElement('div'); btnThrust.className='btn'; btnThrust.id='touch-thrust'; btnThrust.innerText='↑';
+        const btnFire = document.createElement('div'); btnFire.className='btn'; btnFire.id='touch-fire'; btnFire.innerText='●';
+
+        leftGroup.appendChild(btnLeft); leftGroup.appendChild(btnRight);
+        rightGroup.appendChild(btnThrust); rightGroup.appendChild(btnFire);
+        overlay.appendChild(leftGroup); overlay.appendChild(rightGroup);
+        document.body.appendChild(overlay);
+
+        // helper: dispatch keyboard events on canvas
+        function dispatchKey(canvas, type, keyCode, key) {
+            try {
+                const ev = new KeyboardEvent(type, { key: key, code: key, keyCode: keyCode, which: keyCode, bubbles: true, cancelable: true });
+                canvas.dispatchEvent(ev);
+            } catch(e){
+                // fallback: dispatch to window
+                const ev = document.createEvent('Event'); ev.initEvent(type, true, true); ev.key = key; ev.keyCode = keyCode; window.dispatchEvent(ev);
+            }
+        }
+
+        // map buttons to keys used by game (adjust if your game uses different keys)
+        // default mapping: left = ArrowLeft, right = ArrowRight, thrust = ArrowUp, fire = Space
+        const mapping = {
+            'touch-left': {down:['keydown',37,'ArrowLeft'], up:['keyup',37,'ArrowLeft']},
+            'touch-right':{down:['keydown',39,'ArrowRight'], up:['keyup',39,'ArrowRight']},
+            'touch-thrust':{down:['keydown',38,'ArrowUp'], up:['keyup',38,'ArrowUp']},
+            'touch-fire':{down:['keydown',32,' '], up:['keyup',32,' ']}
+        };
+
+        function bindTouch(el){
+            const canvas = document.getElementById('canvas') || document.querySelector('canvas');
+            const map = mapping[el.id];
+            if(!map) return;
+            let active = false;
+            const doDown = (ev)=>{ ev.preventDefault(); if(active) return; active=true; dispatchKey(canvas, map.down[0], map.down[1], map.down[2]); el.classList.add('active'); };
+            const doUp = (ev)=>{ ev.preventDefault(); if(!active) return; active=false; dispatchKey(canvas, map.up[0], map.up[1], map.up[2]); el.classList.remove('active'); };
+            el.addEventListener('touchstart', doDown, {passive:false});
+            el.addEventListener('touchend', doUp, {passive:false});
+            el.addEventListener('touchcancel', doUp, {passive:false});
+            // mouse support for desktop testing
+            el.addEventListener('mousedown', doDown);
+            window.addEventListener('mouseup', doUp);
+        }
+
+        [btnLeft, btnRight, btnThrust, btnFire].forEach(bindTouch);
+
+        // hide overlay on large desktop if you prefer; show when touch-capable
+        function updateVisibility(){
+            const touchCapable = 'ontouchstart' in window || navigator.maxTouchPoints>0;
+            overlay.style.display = touchCapable ? 'flex' : 'none';
+        }
+        updateVisibility(); window.addEventListener('resize', updateVisibility);
+
+    })();
+
     </script>
 
 </body>
