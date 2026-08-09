@@ -123,7 +123,7 @@ POINTS_PER_HIT = 10
 # -----------------------------
 # Works on desktop and mobile with pygbag
 window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Archery Game")
+pygame.display.set_caption("Space X")
 screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 window_width, window_height = SCREEN_WIDTH, SCREEN_HEIGHT
 clock = pygame.time.Clock()
@@ -653,13 +653,34 @@ def main_loop():
 
         try:
             miss_path = os.path.join('audio', 'miss.wav')
-            if os.path.exists(miss_path):
+            # Ensure audio directory exists
+            audio_dir = os.path.dirname(miss_path)
+            if audio_dir and not os.path.exists(audio_dir):
+                os.makedirs(audio_dir, exist_ok=True)
+            if not os.path.exists(miss_path):
+                # Create a small silent WAV placeholder (~50ms) so missing-file warnings do not occur
+                try:
+                    import wave
+                    duration_ms = 50
+                    sr = 22050
+                    n_frames = int(sr * duration_ms / 1000)
+                    with wave.open(miss_path, 'w') as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(sr)
+                        silence = (0).to_bytes(2, byteorder='little', signed=True)
+                        wf.writeframes(silence * n_frames)
+                except Exception:
+                    # Fallback: create an empty file to avoid file-not-found
+                    try:
+                        open(miss_path, 'wb').close()
+                    except Exception:
+                        pass
+            try:
                 miss_sound = pygame.mixer.Sound(miss_path)
-            else:
-                print(f"Warning: {miss_path} not found. Miss sound disabled.")
-        except Exception:
-            miss_sound = None
-            print("Warning: failed to load miss sound")
+            except Exception:
+                miss_sound = None
+                print(f"Warning: failed to load miss sound from {miss_path}")
 
         # Background music disabled per user request — only sound effects (SFX) will be used.
         # Background music loading/playback removed to avoid disturbance.
