@@ -609,7 +609,7 @@ def main_loop():
     file is missing, a warning is printed but the game continues without that
     audio feature.
     """
-    global shoot_sound, hit_sound, miss_sound, bg_music_loaded, WIND, window, window_width, window_height
+    global shoot_sound, hit_sound, bg_music_loaded, WIND, window, window_width, window_height
 
     running = True
 
