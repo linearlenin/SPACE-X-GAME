@@ -1,4 +1,3 @@
 {
-  "buildCommand": "echo 'Skip Build'",
   "outputDirectory": "build/web"
 }
