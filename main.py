@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 main.py - Space Shooter (Vercel Web + Audio + Mobile Responsive Edition)
+Fix: Locked Horizontal Straight Laser Fire Mechanism
 """
 
 import asyncio
@@ -107,25 +108,23 @@ class GlowParticle:
             surface.blit(p_surf, (int(self.x - r * 2), int(self.y - r * 2)), special_flags=pygame.BLEND_ADD)
 
 # -----------------------------
-# Lasers
+# Lasers (STRICTLY HORIZONTAL)
 # -----------------------------
 class LaserArrow:
-    def __init__(self, x, y, vx, vy):
-        self.x = x
-        self.y = y
-        self.vx = vx
-        self.vy = vy
+    def __init__(self, x, y, speed):
+        self.x = float(x)
+        self.y = float(y)
+        self.speed = float(speed)
         self.alive = True
 
     def update(self):
-        self.x += self.vx
-        self.y += self.vy
-        if self.x > SCREEN_WIDTH + 60 or self.y < -50 or self.y > SCREEN_HEIGHT + 50:
+        # Absolutely locked Y axis, moves ONLY to the RIGHT
+        self.x += self.speed
+        if self.x > SCREEN_WIDTH + 60:
             self.alive = False
 
     def draw(self, surface):
         cx, cy = int(self.x), int(self.y)
-        angle = math.atan2(self.vy, self.vx)
         length = 32
 
         glow_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
@@ -133,13 +132,14 @@ class LaserArrow:
         pygame.gfxdraw.filled_circle(glow_surf, 30, 30, 7, (255, 255, 255, 200))
         surface.blit(glow_surf, (cx - 30, cy - 30), special_flags=pygame.BLEND_ADD)
 
-        end_x = cx - int(math.cos(angle) * length)
-        end_y = cy - int(math.sin(angle) * length)
+        # Draw perfectly horizontal laser line
+        end_x = cx - length
+        end_y = cy
         pygame.draw.line(surface, (0, 255, 220), (cx, cy), (end_x, end_y), 5)
         pygame.draw.line(surface, (255, 255, 255), (cx, cy), (end_x, end_y), 2)
 
     def get_rect(self):
-        return pygame.Rect(int(self.x - 8), int(self.y - 8), 16, 16)
+        return pygame.Rect(int(self.x - 16), int(self.y - 8), 32, 16)
 
 # -----------------------------
 # Enemy Targets
@@ -198,27 +198,31 @@ class AlienTarget:
         return pygame.Rect(int(self.x - self.radius), int(self.y - self.radius), self.radius * 2, self.radius * 2)
 
 # -----------------------------
-# On-Screen Touch Controls
+# Touch Controls HUD
 # -----------------------------
 class ControlsHUD:
     def __init__(self):
-        self.btn_up = pygame.Rect(60, SCREEN_HEIGHT - 220, 80, 80)
-        self.btn_down = pygame.Rect(60, SCREEN_HEIGHT - 110, 80, 80)
-        self.btn_fire = pygame.Rect(SCREEN_WIDTH - 150, SCREEN_HEIGHT - 160, 110, 110)
+        self.btn_up = pygame.Rect(50, SCREEN_HEIGHT - 230, 90, 90)
+        self.btn_down = pygame.Rect(50, SCREEN_HEIGHT - 120, 90, 90)
+        self.btn_fire = pygame.Rect(SCREEN_WIDTH - 160, SCREEN_HEIGHT - 160, 120, 120)
 
     def draw(self, surface, charging):
         hud_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        pygame.gfxdraw.filled_circle(hud_surf, self.btn_up.centerx, self.btn_up.centery, 38, (255, 255, 255, 40))
-        pygame.gfxdraw.aacircle(hud_surf, self.btn_up.centerx, self.btn_up.centery, 38, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surf, (255, 255, 255, 180), [(100, SCREEN_HEIGHT - 210), (80, SCREEN_HEIGHT - 175), (120, SCREEN_HEIGHT - 175)])
+        
+        # UP Button
+        pygame.gfxdraw.filled_circle(hud_surf, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 40))
+        pygame.gfxdraw.aacircle(hud_surf, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 120))
+        pygame.draw.polygon(hud_surf, (255, 255, 255, 200), [(95, SCREEN_HEIGHT - 215), (70, SCREEN_HEIGHT - 175), (120, SCREEN_HEIGHT - 175)])
 
-        pygame.gfxdraw.filled_circle(hud_surf, self.btn_down.centerx, self.btn_down.centery, 38, (255, 255, 255, 40))
-        pygame.gfxdraw.aacircle(hud_surf, self.btn_down.centerx, self.btn_down.centery, 38, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surf, (255, 255, 255, 180), [(100, SCREEN_HEIGHT - 45), (80, SCREEN_HEIGHT - 80), (120, SCREEN_HEIGHT - 80)])
+        # DOWN Button
+        pygame.gfxdraw.filled_circle(hud_surf, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 40))
+        pygame.gfxdraw.aacircle(hud_surf, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 120))
+        pygame.draw.polygon(hud_surf, (255, 255, 255, 200), [(95, SCREEN_HEIGHT - 50), (70, SCREEN_HEIGHT - 90), (120, SCREEN_HEIGHT - 90)])
 
-        f_color = (255, 60, 80, 170) if charging else (255, 255, 255, 50)
-        pygame.gfxdraw.filled_circle(hud_surf, self.btn_fire.centerx, self.btn_fire.centery, 52, f_color)
-        pygame.gfxdraw.aacircle(hud_surf, self.btn_fire.centerx, self.btn_fire.centery, 52, (255, 80, 80, 220))
+        # FIRE Button
+        f_color = (255, 60, 80, 200) if charging else (255, 255, 255, 60)
+        pygame.gfxdraw.filled_circle(hud_surf, self.btn_fire.centerx, self.btn_fire.centery, 55, f_color)
+        pygame.gfxdraw.aacircle(hud_surf, self.btn_fire.centerx, self.btn_fire.centery, 55, (255, 80, 80, 240))
         
         lbl = FONT.render("FIRE", True, (255, 255, 255))
         hud_surf.blit(lbl, (self.btn_fire.centerx - lbl.get_width() // 2, self.btn_fire.centery - lbl.get_height() // 2))
@@ -226,7 +230,7 @@ class ControlsHUD:
         surface.blit(hud_surf, (0, 0))
 
 # -----------------------------
-# Main Game Function
+# Main Game Loop
 # -----------------------------
 async def main():
     space_bg = ParallaxSpace()
@@ -282,22 +286,23 @@ async def main():
                         reset_game()
                 else:
                     if event.key == pygame.K_SPACE:
-                        arrows.append(LaserArrow(90, ship_y, 22, 0))
+                        # Space bar tap -> Straight Horizontal Laser
+                        arrows.append(LaserArrow(125, ship_y, 24))
                         play_sound(SOUND_SHOOT)
 
             elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+                mpos = pygame.mouse.get_pos()
                 if game_over:
                     reset_game()
                 else:
-                    mpos = pygame.mouse.get_pos()
                     if controls_hud.btn_fire.collidepoint(mpos):
                         charging = True
 
             elif event.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
                 if not game_over and charging:
-                    # FIX: Always shoot straight to the right (vx > 0, vy = 0)
-                    pwr = max(16.0, min(32.0, power * 1.5))
-                    arrows.append(LaserArrow(90, ship_y, pwr, 0))
+                    # Shoot straight horizontal laser at calculated charge speed
+                    pwr_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
+                    arrows.append(LaserArrow(125, ship_y, pwr_speed))
                     play_sound(SOUND_SHOOT)
                     power = 0.0
                     charging = False
@@ -313,12 +318,14 @@ async def main():
                 level_up_display = 90
 
             if charging:
-                power += 0.75
+                power += 0.8
 
+            # Keyboard Movement
             keys = pygame.key.get_pressed()
             if keys[pygame.K_w] or keys[pygame.K_UP]: ship_y -= 8
             if keys[pygame.K_s] or keys[pygame.K_DOWN]: ship_y += 8
 
+            # Touch Movement
             if pygame.mouse.get_pressed()[0]:
                 mpos = pygame.mouse.get_pos()
                 if controls_hud.btn_up.collidepoint(mpos): ship_y -= 8
@@ -367,18 +374,21 @@ async def main():
         space_bg.draw(screen)
 
         if not game_over:
+            # Player Spacecraft Engine Effect
             for _ in range(3):
                 tx = 80 - random.randint(10, 22)
                 ty = ship_y + random.randint(-5, 5)
                 pygame.gfxdraw.filled_circle(screen, tx, ty, random.randint(3, 7), (0, 220, 255))
 
+            # Draw Ship
             ship_pts = [(125, int(ship_y)), (75, int(ship_y) - 22), (85, int(ship_y)), (75, int(ship_y) + 22)]
             pygame.draw.polygon(screen, (0, 220, 255), ship_pts)
             pygame.draw.polygon(screen, (255, 255, 255), ship_pts, 2)
             pygame.gfxdraw.filled_ellipse(screen, 95, int(ship_y), 12, 6, (255, 255, 255))
 
+            # Charge Indicator
             if charging:
-                fill = int((power / 32.0) * 120)
+                fill = int((min(power, 20.0) / 20.0) * 120)
                 pygame.draw.rect(screen, (40, 40, 40), (60, ship_y - 45, 120, 8), border_radius=4)
                 pygame.draw.rect(screen, (0, 255, 180), (60, ship_y - 45, fill, 8), border_radius=4)
 
