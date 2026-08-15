@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py - Space Shooter (Vercel Web + Audio + Procedural Glow Edition)
+main.py - Space Shooter (Vercel Web + Audio + Mobile Touch Restart Edition)
 Compatible with Pygbag / Web Assembly Deployment
 """
 
@@ -235,11 +235,27 @@ async def main():
     space_bg = ParallaxSpace()
     controls_hud = ControlsHUD()
 
+    # Reset game state function
+    def reset_game():
+        nonlocal ship_y, lives, score, level, arrows, targets, particles, power, charging, game_over, spawn_timer, level_up_display, shake_timer
+        ship_y = SCREEN_HEIGHT // 2
+        lives = 5
+        score = 0
+        level = 1
+        arrows = []
+        targets = []
+        particles = []
+        power = 0.0
+        charging = False
+        game_over = False
+        spawn_timer = 0
+        level_up_display = 0
+        shake_timer = 0
+
     ship_y = SCREEN_HEIGHT // 2
     lives = 5
     score = 0
     level = 1
-    
     arrows = []
     targets = []
     particles = []
@@ -254,13 +270,10 @@ async def main():
 
     while True:
         dt = clock.tick(FPS)
-        spawn_timer += dt
 
-        target_level = (score // 100) + 1
-        if target_level > level:
-            level = target_level
-            level_up_display = 90
-
+        # -----------------------------
+        # 1️⃣ Event Handling Loop
+        # -----------------------------
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -270,20 +283,28 @@ async def main():
                 if event.key == pygame.K_ESCAPE: 
                     pygame.quit()
                     sys.exit()
-                if event.key == pygame.K_SPACE and not game_over:
-                    arrows.append(LaserArrow(90, ship_y, 20, 0))
-                    play_sound(SOUND_SHOOT)
-                if event.key == pygame.K_r and game_over: 
-                    await main()
-                    return
+                
+                # Keyboard Restart support
+                if game_over:
+                    if event.key == pygame.K_r:
+                        reset_game()
+                else:
+                    if event.key == pygame.K_SPACE:
+                        arrows.append(LaserArrow(90, ship_y, 20, 0))
+                        play_sound(SOUND_SHOOT)
 
-            elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.FINGERDOWN:
-                mpos = event.pos if event.type == pygame.MOUSEBUTTONDOWN else (int(event.x * SCREEN_WIDTH), int(event.y * SCREEN_HEIGHT))
-                if controls_hud.btn_fire.collidepoint(mpos) or event.type == pygame.MOUSEBUTTONDOWN:
-                    charging = True
+            # Touch and Mouse Click Event logic
+            elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+                if game_over:
+                    # Touch/Click anywhere on screen to Restart
+                    reset_game()
+                else:
+                    mpos = pygame.mouse.get_pos()
+                    if controls_hud.btn_fire.collidepoint(mpos):
+                        charging = True
 
-            elif event.type == pygame.MOUSEBUTTONUP or event.type == pygame.FINGERUP:
-                if charging:
+            elif event.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
+                if not game_over and charging:
                     mx, my = pygame.mouse.get_pos()
                     angle = math.atan2(my - ship_y, mx - 90)
                     pwr = max(9.0, min(32.0, power))
@@ -295,22 +316,32 @@ async def main():
                     power = 0.0
                     charging = False
 
-        if charging:
-            power += 0.75
-
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_w] or keys[pygame.K_UP]: ship_y -= 8
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]: ship_y += 8
-
-        if pygame.mouse.get_pressed()[0]:
-            mpos = pygame.mouse.get_pos()
-            if controls_hud.btn_up.collidepoint(mpos): ship_y -= 8
-            if controls_hud.btn_down.collidepoint(mpos): ship_y += 8
-
-        ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
+        # -----------------------------
+        # Game State Updates (When active)
+        # -----------------------------
+        space_bg.update()
 
         if not game_over:
-            space_bg.update()
+            spawn_timer += dt
+
+            target_level = (score // 100) + 1
+            if target_level > level:
+                level = target_level
+                level_up_display = 90
+
+            if charging:
+                power += 0.75
+
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_w] or keys[pygame.K_UP]: ship_y -= 8
+            if keys[pygame.K_s] or keys[pygame.K_DOWN]: ship_y += 8
+
+            if pygame.mouse.get_pressed()[0]:
+                mpos = pygame.mouse.get_pos()
+                if controls_hud.btn_up.collidepoint(mpos): ship_y -= 8
+                if controls_hud.btn_down.collidepoint(mpos): ship_y += 8
+
+            ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
 
             spawn_interval = max(450, 1600 - (level * 220))
             if spawn_timer >= spawn_interval:
@@ -329,6 +360,7 @@ async def main():
                     lives -= 1
                     if lives <= 0: 
                         game_over = True
+                        charging = False
 
             for p in particles[:]:
                 p.update()
@@ -349,43 +381,66 @@ async def main():
                         if t in targets: targets.remove(t)
                         break
 
+        # -----------------------------
+        # Drawing Logic
+        # -----------------------------
         space_bg.draw(screen)
 
-        for _ in range(3):
-            tx = 80 - random.randint(10, 22)
-            ty = ship_y + random.randint(-5, 5)
-            pygame.gfxdraw.filled_circle(screen, tx, ty, random.randint(3, 7), (0, 220, 255))
+        if not game_over:
+            # Thruster & Ship Drawing
+            for _ in range(3):
+                tx = 80 - random.randint(10, 22)
+                ty = ship_y + random.randint(-5, 5)
+                pygame.gfxdraw.filled_circle(screen, tx, ty, random.randint(3, 7), (0, 220, 255))
 
-        ship_pts = [(125, int(ship_y)), (75, int(ship_y) - 22), (85, int(ship_y)), (75, int(ship_y) + 22)]
-        pygame.draw.polygon(screen, (0, 220, 255), ship_pts)
-        pygame.draw.polygon(screen, (255, 255, 255), ship_pts, 2)
-        pygame.gfxdraw.filled_ellipse(screen, 95, int(ship_y), 12, 6, (255, 255, 255))
+            ship_pts = [(125, int(ship_y)), (75, int(ship_y) - 22), (85, int(ship_y)), (75, int(ship_y) + 22)]
+            pygame.draw.polygon(screen, (0, 220, 255), ship_pts)
+            pygame.draw.polygon(screen, (255, 255, 255), ship_pts, 2)
+            pygame.gfxdraw.filled_ellipse(screen, 95, int(ship_y), 12, 6, (255, 255, 255))
 
-        if charging:
-            fill = int((power / 32.0) * 120)
-            pygame.draw.rect(screen, (40, 40, 40), (60, ship_y - 45, 120, 8), border_radius=4)
-            pygame.draw.rect(screen, (0, 255, 180), (60, ship_y - 45, fill, 8), border_radius=4)
+            if charging:
+                fill = int((power / 32.0) * 120)
+                pygame.draw.rect(screen, (40, 40, 40), (60, ship_y - 45, 120, 8), border_radius=4)
+                pygame.draw.rect(screen, (0, 255, 180), (60, ship_y - 45, fill, 8), border_radius=4)
 
         for t in targets: t.draw(screen)
         for a in arrows: a.draw(screen)
         for p in particles: p.draw(screen)
 
-        controls_hud.draw(screen, charging)
+        if not game_over:
+            controls_hud.draw(screen, charging)
 
         hud_txt = FONT.render(f"SCORE: {score}  |  LIVES: {lives}  |  LEVEL: {level}", True, (255, 255, 255))
         screen.blit(hud_txt, (20, 20))
 
-        if level_up_display > 0:
+        if level_up_display > 0 and not game_over:
             level_up_display -= 1
             lvl_lbl = LEVEL_FONT.render(f"LEVEL {level} UP!", True, (0, 255, 180))
             screen.blit(lvl_lbl, (SCREEN_WIDTH // 2 - lvl_lbl.get_width() // 2, 130))
 
+        # -----------------------------
+        # 2️⃣ Game Over UI & Touch Restart Button
+        # -----------------------------
         if game_over:
+            # Game Over Heading
             go_txt = BIG_FONT.render("GAME OVER", True, (255, 60, 60))
-            screen.blit(go_txt, (SCREEN_WIDTH // 2 - go_txt.get_width() // 2, SCREEN_HEIGHT // 2 - 40))
-            r_txt = FONT.render("Press R to Restart", True, (200, 200, 200))
-            screen.blit(r_txt, (SCREEN_WIDTH // 2 - r_txt.get_width() // 2, SCREEN_HEIGHT // 2 + 35))
+            screen.blit(go_txt, (SCREEN_WIDTH // 2 - go_txt.get_width() // 2, SCREEN_HEIGHT // 2 - 90))
 
+            # Touch Restart Button Box
+            btn_w, btn_h = 280, 60
+            restart_btn = pygame.Rect(SCREEN_WIDTH // 2 - btn_w // 2, SCREEN_HEIGHT // 2, btn_w, btn_h)
+            pygame.draw.rect(screen, (0, 190, 240), restart_btn, border_radius=14)
+            pygame.draw.rect(screen, (255, 255, 255), restart_btn, 3, border_radius=14)
+
+            # Button Text
+            btn_text = FONT.render("TAP TO RESTART", True, (255, 255, 255))
+            screen.blit(btn_text, (restart_btn.centerx - btn_text.get_width() // 2, restart_btn.centery - btn_text.get_height() // 2))
+
+            # Keyboard Subtext
+            r_txt = FONT.render("( or Press 'R' Key )", True, (170, 170, 170))
+            screen.blit(r_txt, (SCREEN_WIDTH // 2 - r_txt.get_width() // 2, SCREEN_HEIGHT // 2 + 75))
+
+        # Screen Shake effect
         render_offset = [0, 0]
         if shake_timer > 0:
             shake_timer -= 1
