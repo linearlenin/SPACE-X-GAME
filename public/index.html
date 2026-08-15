@@ -174,6 +174,16 @@ function show_infobox() {
     <link rel="icon" type="image/png" href="favicon.png" sizes="16x16">
 
     <style>
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-color: #000000 !important;
+            overflow: hidden;
+            touch-action: none;
+        }
+
         #status {
             display: inline-block;
             vertical-align: top;
@@ -189,7 +199,7 @@ function show_infobox() {
         }
 
         #infobox {
-            position: fixed; /* center relative to viewport */
+            position: fixed;
             background: #00e5ff;
             color: #060816;
             font-weight: bold;
@@ -199,66 +209,22 @@ function show_infobox() {
         }
 
         div.emscripten { text-align: center; }
-        div.emscripten_border { border: 1px solid black; }
-        div.thick_border { border: 4px solid black; }
 
-        /* --- RESPONSIVE FULLSCREEN CANVAS FOR PC & MOBILE --- */
+        /* Full Screen Canvas Scaling Fix */
         canvas.emscripten {
             border: 0px none;
-            background-color: #060816; /* Space Theme Match */
+            background-color: #060816;
             width: 100vw !important;
             height: 100vh !important;
-            object-fit: contain !important; /* Preserves 16:9 aspect ratio */
+            object-fit: fill !important; /* Screen fit stretches edge-to-edge */
             z-index: 5;
-
             padding: 0;
             margin: 0 auto;
-
             position: absolute;
             top: 0;
             bottom: 0;
             left: 0;
             right: 0;
-        }
-
-        body {
-            font-family: arial;
-            margin: 0;
-            padding: 0;
-            background-color: #000000;
-            overflow: hidden; /* Remove scrollbars */
-            touch-action: none; /* Disable pull-to-refresh on mobile */
-        }
-
-        .topright{
-           position:absolute;
-           top:0px;
-           right:0px;
-        }
-
-        .bottomright {
-            position:absolute;
-            top: 40%;
-            right: 0px;
-        }
-
-        .center {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .trinfo{
-           position: relative;
-           right: 0px;
-           border: 1px solid black;
-        }
-
-        .framed{
-           position: relative;
-           top: 150px;
-           right: 10px;
-           border: 1px solid black;
         }
     </style>
 

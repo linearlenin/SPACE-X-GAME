@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py - Space Shooter (Vercel Web + Audio + Mobile Touch Restart Edition)
-Compatible with Pygbag / Web Assembly Deployment
+main.py - Space Shooter (Vercel Web + Audio + Mobile Responsive Edition)
 """
 
 import asyncio
@@ -13,7 +12,7 @@ import math
 import os
 
 # -----------------------------
-# Initialization & Audio Setup
+# Initialization & Display
 # -----------------------------
 pygame.init()
 pygame.mixer.init()
@@ -24,7 +23,7 @@ SCREEN_HEIGHT = 720
 FPS = 60
 
 window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED | pygame.RESIZABLE)
-pygame.display.set_caption("Space Shooter - Audio & Procedural Glow Edition")
+pygame.display.set_caption("Space Shooter")
 screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = pygame.time.Clock()
 
@@ -32,7 +31,7 @@ FONT = pygame.font.SysFont("Consolas", 22, bold=True)
 BIG_FONT = pygame.font.SysFont("Impact", 64)
 LEVEL_FONT = pygame.font.SysFont("Impact", 80)
 
-# Load Sound Effects safely from 'audio/' folder
+# Load Sound Effects
 def load_sound(filename):
     path = os.path.join("audio", filename)
     if os.path.exists(path):
@@ -40,8 +39,6 @@ def load_sound(filename):
             return pygame.mixer.Sound(path)
         except Exception as e:
             print(f"Error loading sound {path}: {e}")
-    else:
-        print(f"Sound file not found: {path}")
     return None
 
 SOUND_SHOOT = load_sound("shoot.wav")
@@ -74,7 +71,7 @@ class ParallaxSpace:
                 star[1] = random.randint(0, SCREEN_HEIGHT)
 
     def draw(self, surface):
-        surface.fill((6, 8, 22))  # Deep Space
+        surface.fill((6, 8, 22))
         for x, y, speed, size, alpha in self.stars:
             col = (200, 230, 255)
             pygame.gfxdraw.filled_circle(surface, int(x), int(y), size, (*col, alpha))
@@ -110,7 +107,7 @@ class GlowParticle:
             surface.blit(p_surf, (int(self.x - r * 2), int(self.y - r * 2)), special_flags=pygame.BLEND_ADD)
 
 # -----------------------------
-# Lasers & Missiles
+# Lasers
 # -----------------------------
 class LaserArrow:
     def __init__(self, x, y, vx, vy):
@@ -229,13 +226,12 @@ class ControlsHUD:
         surface.blit(hud_surf, (0, 0))
 
 # -----------------------------
-# Main Game Function (Async for Web)
+# Main Game Function
 # -----------------------------
 async def main():
     space_bg = ParallaxSpace()
     controls_hud = ControlsHUD()
 
-    # Reset game state function
     def reset_game():
         nonlocal ship_y, lives, score, level, arrows, targets, particles, power, charging, game_over, spawn_timer, level_up_display, shake_timer
         ship_y = SCREEN_HEIGHT // 2
@@ -271,9 +267,6 @@ async def main():
     while True:
         dt = clock.tick(FPS)
 
-        # -----------------------------
-        # 1️⃣ Event Handling Loop
-        # -----------------------------
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -284,19 +277,16 @@ async def main():
                     pygame.quit()
                     sys.exit()
                 
-                # Keyboard Restart support
                 if game_over:
                     if event.key == pygame.K_r:
                         reset_game()
                 else:
                     if event.key == pygame.K_SPACE:
-                        arrows.append(LaserArrow(90, ship_y, 20, 0))
+                        arrows.append(LaserArrow(90, ship_y, 22, 0))
                         play_sound(SOUND_SHOOT)
 
-            # Touch and Mouse Click Event logic
             elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
                 if game_over:
-                    # Touch/Click anywhere on screen to Restart
                     reset_game()
                 else:
                     mpos = pygame.mouse.get_pos()
@@ -305,20 +295,13 @@ async def main():
 
             elif event.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
                 if not game_over and charging:
-                    mx, my = pygame.mouse.get_pos()
-                    angle = math.atan2(my - ship_y, mx - 90)
-                    pwr = max(9.0, min(32.0, power))
-                    vx = math.cos(angle) * pwr
-                    vy = math.sin(angle) * pwr
-
-                    arrows.append(LaserArrow(90, ship_y, vx, vy))
+                    # FIX: Always shoot straight to the right (vx > 0, vy = 0)
+                    pwr = max(16.0, min(32.0, power * 1.5))
+                    arrows.append(LaserArrow(90, ship_y, pwr, 0))
                     play_sound(SOUND_SHOOT)
                     power = 0.0
                     charging = False
 
-        # -----------------------------
-        # Game State Updates (When active)
-        # -----------------------------
         space_bg.update()
 
         if not game_over:
@@ -381,13 +364,9 @@ async def main():
                         if t in targets: targets.remove(t)
                         break
 
-        # -----------------------------
-        # Drawing Logic
-        # -----------------------------
         space_bg.draw(screen)
 
         if not game_over:
-            # Thruster & Ship Drawing
             for _ in range(3):
                 tx = 80 - random.randint(10, 22)
                 ty = ship_y + random.randint(-5, 5)
@@ -418,29 +397,21 @@ async def main():
             lvl_lbl = LEVEL_FONT.render(f"LEVEL {level} UP!", True, (0, 255, 180))
             screen.blit(lvl_lbl, (SCREEN_WIDTH // 2 - lvl_lbl.get_width() // 2, 130))
 
-        # -----------------------------
-        # 2️⃣ Game Over UI & Touch Restart Button
-        # -----------------------------
         if game_over:
-            # Game Over Heading
             go_txt = BIG_FONT.render("GAME OVER", True, (255, 60, 60))
             screen.blit(go_txt, (SCREEN_WIDTH // 2 - go_txt.get_width() // 2, SCREEN_HEIGHT // 2 - 90))
 
-            # Touch Restart Button Box
             btn_w, btn_h = 280, 60
             restart_btn = pygame.Rect(SCREEN_WIDTH // 2 - btn_w // 2, SCREEN_HEIGHT // 2, btn_w, btn_h)
             pygame.draw.rect(screen, (0, 190, 240), restart_btn, border_radius=14)
             pygame.draw.rect(screen, (255, 255, 255), restart_btn, 3, border_radius=14)
 
-            # Button Text
             btn_text = FONT.render("TAP TO RESTART", True, (255, 255, 255))
             screen.blit(btn_text, (restart_btn.centerx - btn_text.get_width() // 2, restart_btn.centery - btn_text.get_height() // 2))
 
-            # Keyboard Subtext
             r_txt = FONT.render("( or Press 'R' Key )", True, (170, 170, 170))
             screen.blit(r_txt, (SCREEN_WIDTH // 2 - r_txt.get_width() // 2, SCREEN_HEIGHT // 2 + 75))
 
-        # Screen Shake effect
         render_offset = [0, 0]
         if shake_timer > 0:
             shake_timer -= 1
@@ -449,8 +420,6 @@ async def main():
 
         window.blit(screen, render_offset)
         pygame.display.flip()
-
-        # Crucial for Web Browser Playability!
         await asyncio.sleep(0)
 
 if __name__ == '__main__':
