@@ -5,22 +5,25 @@ from pathlib import Path
 
 SOURCE = Path(".").resolve()
 BUILD_WEB = SOURCE / "build" / "web"
+PYGBAG_SOURCE = SOURCE / "build" / "pygbag-source" / "space-x-game"
+PYGBAG_WEB = PYGBAG_SOURCE / "build" / "web"
 PUBLIC = SOURCE / "public"
 REQUIRED_FILES = ["index.html", "favicon.png", "space-x-game.tar.gz"]
 
 
 def python_cmd():
-    if (3, 12) <= __import__("sys").version_info[:2]:
-        return [__import__("sys").executable]
+    import sys
+
+    if sys.version_info[:2] == (3, 12):
+        return [sys.executable]
     py_launcher = shutil.which("py")
     if py_launcher:
         return [py_launcher, "-3.12"]
-    for exe in ("python3.12", "python3.11", "python"):
-        if shutil.which(exe):
-            return [exe]
-    return ["python"]
+    python312 = shutil.which("python3.12")
+    return [python312 or sys.executable]
 
 CUSTOM_CSS = """
+<!-- SPACE_X_CUSTOM_CSS_START -->
 <style>
     html, body {
         width: 100vw;
@@ -46,15 +49,18 @@ CUSTOM_CSS = """
         position: fixed;
         left: 0;
         right: 0;
-        bottom: 24px;
+        bottom: max(16px, env(safe-area-inset-bottom));
         display: none;
         justify-content: center;
         align-items: center;
+        padding: 14px 18px;
         color: #dfeeff;
-        font-size: 18px;
+        font-size: clamp(14px, 3.8vw, 22px);
         font-weight: 700;
         letter-spacing: 0.12em;
         text-transform: uppercase;
+        text-align: center;
+        background: rgba(3, 10, 24, 0.86);
         text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
         z-index: 9999;
     }
@@ -143,22 +149,24 @@ CUSTOM_CSS = """
     canvas.emscripten {
         border: 0px none;
         background: transparent;
-        width: 100vw !important;
-        height: 100vh !important;
+        width: min(100vw, 177.7778vh) !important;
+        height: min(100vh, 56.25vw) !important;
         max-width: 100vw !important;
         max-height: 100vh !important;
-        object-fit: fill !important;
+        aspect-ratio: 16 / 9;
+        object-fit: contain !important;
         z-index: 5;
         padding: 0;
         margin: 0 auto;
         position: absolute;
-        top: 0;
-        bottom: 0;
+        top: 50%;
+        bottom: auto;
         left: 50% !important;
         right: auto !important;
-        transform: translateX(-50%);
+        transform: translate(-50%, -50%);
     }
 </style>
+<!-- SPACE_X_CUSTOM_CSS_END -->
 """
 
 CUSTOM_BODY = """
@@ -172,6 +180,7 @@ CUSTOM_BODY = """
 """
 
 CUSTOM_SCRIPT = """
+<!-- SPACE_X_CUSTOM_SCRIPT_START -->
 <script>
     window.addEventListener('load', function () {
         const loader = document.getElementById('game-loading-shell');
@@ -187,6 +196,7 @@ CUSTOM_SCRIPT = """
         document.addEventListener('keydown', hideLoader, { once: true });
     });
 </script>
+<!-- SPACE_X_CUSTOM_SCRIPT_END -->
 """
 
 
@@ -195,36 +205,77 @@ def patch_generated_html(index_path: Path):
         return
 
     html = index_path.read_text(encoding="utf-8")
-    if "#game-loading-shell" not in html:
-        html = html.replace("</head>", CUSTOM_CSS + "</head>", 1)
+    css_start = html.find("<!-- SPACE_X_CUSTOM_CSS_START -->")
+    css_end = html.find("<!-- SPACE_X_CUSTOM_CSS_END -->")
+    if css_start >= 0 and css_end >= css_start:
+        css_end += len("<!-- SPACE_X_CUSTOM_CSS_END -->")
+        html = html[:css_start] + CUSTOM_CSS.strip() + html[css_end:]
+    else:
+        old_css_start = html.rfind("<style>\n    html, body {")
+        if old_css_start >= 0:
+            old_css_end = html.find("</style>", old_css_start) + len("</style>")
+            html = html[:old_css_start] + CUSTOM_CSS.strip() + html[old_css_end:]
+        else:
+            html = html.replace("</head>", CUSTOM_CSS + "</head>", 1)
+
+    if 'id="game-loading-shell"' not in html:
         html = html.replace("<body>", "<body>" + CUSTOM_BODY, 1)
-        if "</body>" in html:
-            html = html.replace("</body>", CUSTOM_SCRIPT + "</body>", 1)
-        index_path.write_text(html, encoding="utf-8")
+
+    script_start = html.find("<!-- SPACE_X_CUSTOM_SCRIPT_START -->")
+    script_end = html.find("<!-- SPACE_X_CUSTOM_SCRIPT_END -->")
+    if script_start >= 0 and script_end >= script_start:
+        script_end += len("<!-- SPACE_X_CUSTOM_SCRIPT_END -->")
+        html = html[:script_start] + CUSTOM_SCRIPT.strip() + html[script_end:]
+    elif "window.addEventListener('load', function ()" not in html:
+        html = html.replace("</body>", CUSTOM_SCRIPT + "</body>", 1)
+
+    index_path.write_text(html, encoding="utf-8")
 
 
 def build_web():
     py = python_cmd()
     subprocess.check_call(py + ["-m", "pip", "install", "-r", "requirements.txt"])
-    subprocess.check_call(py + ["-m", "pygbag", "--build", "--html", "main.py"])
 
-    if not BUILD_WEB.is_dir():
-        raise FileNotFoundError(f"Expected build output directory not found: {BUILD_WEB}")
+    PYGBAG_SOURCE.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SOURCE / "main.py", PYGBAG_SOURCE / "main.py")
+    shutil.copytree(SOURCE / "audio", PYGBAG_SOURCE / "audio", dirs_exist_ok=True)
+    shutil.copy2(PUBLIC / "favicon.png", PYGBAG_SOURCE / "favicon.png")
+    (PYGBAG_SOURCE / "pygbag.ini").write_text(
+        '[DEPENDENCIES]\nignoreDirs = ["build", "__pycache__"]\nignoreFiles = ["pygbag.ini"]\n',
+        encoding="utf-8",
+    )
+
+    subprocess.check_call(
+        py + [
+            "-m",
+            "pygbag",
+            "--build",
+            "--disable-sound-format-error",
+            str(PYGBAG_SOURCE / "main.py"),
+        ],
+        cwd=PYGBAG_SOURCE,
+    )
+
+    if not PYGBAG_WEB.is_dir():
+        raise FileNotFoundError(f"Expected build output directory not found: {PYGBAG_WEB}")
 
     PUBLIC.mkdir(exist_ok=True)
+    BUILD_WEB.mkdir(parents=True, exist_ok=True)
 
     for filename in REQUIRED_FILES:
-        source_file = BUILD_WEB / filename
+        source_file = PYGBAG_WEB / filename
         dest_file = PUBLIC / filename
         if not source_file.is_file():
             raise FileNotFoundError(f"Expected build artifact not found: {source_file}")
         if filename == "index.html":
             patch_generated_html(source_file)
+        shutil.copy2(source_file, BUILD_WEB / filename)
         shutil.copy2(source_file, dest_file)
 
+    patch_generated_html(BUILD_WEB / "index.html")
     patch_generated_html(PUBLIC / "index.html")
 
-    print(f"Public web assets copied to {PUBLIC}")
+    print(f"Web assets copied to {BUILD_WEB} and {PUBLIC}")
 
 
 if __name__ == "__main__":

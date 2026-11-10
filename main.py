@@ -95,12 +95,12 @@ class ParallaxSpace:
             y = random.randint(0, SCREEN_HEIGHT)
             speed = random.uniform(0.6, 4.2)
             size = max(1, int(speed * 0.9))
-            alpha = int(speed * 70)
+            alpha = min(255, int(speed * 70))
             self.stars.append([x, y, speed, size, alpha])
 
-    def update(self):
+    def update(self, frame_scale=1.0):
         for star in self.stars:
-            star[0] -= star[2]
+            star[0] -= star[2] * frame_scale
             if star[0] < 0:
                 star[0] = SCREEN_WIDTH
                 star[1] = random.randint(0, SCREEN_HEIGHT)
@@ -148,8 +148,8 @@ class LaserArrow:
         self.alive = True
         self.double_shot = double_shot
 
-    def update(self):
-        self.x += self.speed
+    def update(self, frame_scale=1.0):
+        self.x += self.speed * frame_scale
         if self.x > SCREEN_WIDTH + 100:
             self.alive = False
 
@@ -174,8 +174,8 @@ class PowerUp:
         self.width = 20
         self.height = 20
 
-    def update(self):
-        self.x -= self.speed
+    def update(self, frame_scale=1.0):
+        self.x -= self.speed * frame_scale
         if self.x < -40:
             self.alive = False
 
@@ -200,33 +200,33 @@ class AlienTarget:
         self.kind = "standard"
         self.alive = True
 
-        if level >= 5 and random.random() < 0.18:
+        if level >= 5 and random.random() < 0.10:
             self.kind = "boss"
             self.radius = 68
             self.color = (255, 90, 140)
             self.score_val = 200
-            self.speed = 2.2 + level * 0.15
+            self.speed = 1.5 + level * 0.12
             self.health = 4
         else:
             roll = random.random()
-            if level >= 3 and roll < 0.28:
+            if level >= 4 and roll < 0.22:
                 self.kind = "zigzag"
                 self.radius = 22
                 self.color = (50, 180, 255)
                 self.score_val = 25
-                self.speed = 4.1 + level * 0.4
-            elif level >= 2 and roll < 0.52:
+                self.speed = 2.6 + level * 0.2
+            elif level >= 3 and roll < 0.42:
                 self.kind = "fast"
                 self.radius = 16
                 self.color = (255, 120, 70)
                 self.score_val = 15
-                self.speed = 5.6 + level * 0.45
+                self.speed = 3.2 + level * 0.2
             else:
                 self.kind = "heavy"
                 self.radius = 30
                 self.color = (255, 210, 0)
                 self.score_val = 30
-                self.speed = 3.2 + level * 0.5
+                self.speed = 2.0 + level * 0.18
 
         if self.kind == "boss":
             self.width = 150
@@ -235,10 +235,10 @@ class AlienTarget:
             self.width = self.radius * 2
             self.height = self.radius * 2
 
-    def update(self):
-        self.x -= self.speed
+    def update(self, frame_scale=1.0):
+        self.x -= self.speed * frame_scale
         if self.kind in {"zigzag", "boss"}:
-            self.y += math.sin((self.x / 30.0) + self.phase) * 1.8
+            self.y += math.sin((self.x / 30.0) + self.phase) * 1.2 * frame_scale
         if self.x < -150:
             self.alive = False
 
@@ -397,9 +397,14 @@ async def main():
     move_up = False
     move_down = False
     fire_held = False
+    active_touches = {}
+    touch_directions = {}
+    fire_pointer = None
+    mouse_drag = False
+    mouse_move_direction = 0
 
     def reset_game():
-        nonlocal ship_y, lives, score, level, arrows, targets, particles, powerups, power, charging, spawn_timer, level_up_display, shake_timer, fire_repeat, invincible_timer, shield_timer, double_timer, move_up, move_down, fire_held
+        nonlocal ship_y, lives, score, level, arrows, targets, particles, powerups, power, charging, spawn_timer, level_up_display, shake_timer, fire_repeat, invincible_timer, shield_timer, double_timer, move_up, move_down, fire_held, fire_pointer, mouse_drag, mouse_move_direction
         ship_y = SCREEN_HEIGHT // 2
         lives = 5
         score = 0
@@ -420,6 +425,36 @@ async def main():
         move_up = False
         move_down = False
         fire_held = False
+        fire_pointer = None
+        mouse_drag = False
+        mouse_move_direction = 0
+        active_touches.clear()
+        touch_directions.clear()
+
+    def pointer_position(event):
+        if event.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
+            window_width, window_height = pygame.display.get_window_size()
+            scale = min(window_width / SCREEN_WIDTH, window_height / SCREEN_HEIGHT)
+            canvas_width = SCREEN_WIDTH * scale
+            canvas_height = SCREEN_HEIGHT * scale
+            offset_x = (window_width - canvas_width) / 2
+            offset_y = (window_height - canvas_height) / 2
+            return (
+                int((event.x * window_width - offset_x) / scale),
+                int((event.y * window_height - offset_y) / scale),
+            )
+        return event.pos
+
+    def fire_charged_shot():
+        nonlocal power, charging, fire_held, fire_pointer
+        if charging:
+            shot_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
+            arrows.append(LaserArrow(125, ship_y, shot_speed))
+            play_sound(SOUND_SHOOT)
+            power = 0.0
+        charging = False
+        fire_held = False
+        fire_pointer = None
 
     while True:
         dt = clock.tick(FPS)
@@ -478,8 +513,10 @@ async def main():
                         power = 0.0
                         charging = False
 
-            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+            if event.type == pygame.FINGERDOWN:
                 unlock_audio()
+                pos = pointer_position(event)
+                active_touches[event.finger_id] = pos
                 if game_state == "menu":
                     game_state = "playing"
                     reset_game()
@@ -487,43 +524,77 @@ async def main():
                     reset_game()
                     game_state = "playing"
                 else:
-                    pos = pygame.mouse.get_pos()
                     if controls_hud.btn_fire.collidepoint(pos):
                         charging = True
                         fire_held = True
+                        fire_pointer = event.finger_id
                     elif controls_hud.btn_pause.collidepoint(pos):
                         if game_state == "playing":
                             game_state = "paused"
                         else:
                             game_state = "playing"
+                    elif controls_hud.btn_up.collidepoint(pos):
+                        touch_directions[event.finger_id] = -1
+                    elif controls_hud.btn_down.collidepoint(pos):
+                        touch_directions[event.finger_id] = 1
+                    elif game_state == "playing":
+                        ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
 
-            if event.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
-                if game_state == "playing" and charging:
-                    pos = pygame.mouse.get_pos()
-                    if controls_hud.btn_fire.collidepoint(pos) or fire_held:
-                        shot_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
-                        arrows.append(LaserArrow(125, ship_y, shot_speed))
-                        play_sound(SOUND_SHOOT)
-                        power = 0.0
-                        charging = False
-                        fire_held = False
+            if event.type == pygame.FINGERMOTION:
+                pos = pointer_position(event)
+                if event.finger_id in active_touches:
+                    active_touches[event.finger_id] = pos
+                    if game_state == "playing" and event.finger_id != fire_pointer and event.finger_id not in touch_directions:
+                        ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
 
-            if event.type == pygame.MOUSEMOTION and game_state == "playing":
-                pos = pygame.mouse.get_pos()
-                if controls_hud.btn_up.collidepoint(pos):
-                    move_up = True
+            if event.type == pygame.FINGERUP:
+                active_touches.pop(event.finger_id, None)
+                touch_directions.pop(event.finger_id, None)
+                if event.finger_id == fire_pointer:
+                    fire_charged_shot()
+
+            if event.type == pygame.MOUSEBUTTONDOWN and not getattr(event, "touch", False):
+                unlock_audio()
+                pos = pointer_position(event)
+                if game_state == "menu":
+                    game_state = "playing"
+                    reset_game()
+                elif game_state == "game_over":
+                    reset_game()
+                    game_state = "playing"
+                elif controls_hud.btn_fire.collidepoint(pos):
+                    charging = True
+                    fire_held = True
+                    fire_pointer = "mouse"
+                elif controls_hud.btn_pause.collidepoint(pos):
+                    game_state = "paused" if game_state == "playing" else "playing"
+                elif controls_hud.btn_up.collidepoint(pos):
+                    mouse_move_direction = -1
                 elif controls_hud.btn_down.collidepoint(pos):
-                    move_down = True
+                    mouse_move_direction = 1
+                elif game_state == "playing":
+                    mouse_drag = True
+                    ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
 
-        space_bg.update()
+            if event.type == pygame.MOUSEMOTION and mouse_drag and game_state == "playing" and not getattr(event, "touch", False):
+                _, pointer_y = pointer_position(event)
+                ship_y = max(50, min(SCREEN_HEIGHT - 60, pointer_y))
+
+            if event.type == pygame.MOUSEBUTTONUP and not getattr(event, "touch", False):
+                if fire_pointer == "mouse":
+                    fire_charged_shot()
+                mouse_drag = False
+                mouse_move_direction = 0
+
+        space_bg.update(dt / (1000.0 / FPS))
 
         if game_state == "playing":
+            frame_scale = dt / (1000.0 / FPS)
             ship_speed = 480.0
-            move_delta = 0.0
-            if move_up:
-                move_delta -= 1
-            if move_down:
-                move_delta += 1
+            keys = pygame.key.get_pressed()
+            touch_up = any(direction < 0 for direction in touch_directions.values())
+            touch_down = any(direction > 0 for direction in touch_directions.values())
+            move_delta = int(move_down or touch_down or mouse_move_direction > 0) - int(move_up or touch_up or mouse_move_direction < 0)
             ship_y += move_delta * ship_speed * dt / 1000.0
             ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
 
@@ -532,30 +603,28 @@ async def main():
                 if power > 20.0:
                     power = 20.0
 
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_w] or keys[pygame.K_UP]:
-                ship_y -= 480 * dt / 1000.0
-            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-                ship_y += 480 * dt / 1000.0
-            ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
-
             if keys[pygame.K_SPACE]:
                 fire_repeat += dt
                 if fire_repeat >= 150:
-                    shot_speed = 24.0 if double_timer <= 0 else 30.0
-                    arrows.append(LaserArrow(125, ship_y, shot_speed, double_shot=double_timer > 0))
+                    shot_speed = 24.0
+                    if double_timer > 0:
+                        arrows.append(LaserArrow(125, ship_y - 10, shot_speed, double_shot=True))
+                        arrows.append(LaserArrow(125, ship_y + 10, shot_speed, double_shot=True))
+                    else:
+                        arrows.append(LaserArrow(125, ship_y, shot_speed))
                     play_sound(SOUND_SHOOT)
                     fire_repeat = 0.0
 
-            spawn_interval = max(500, 1700 - level * 180)
+            spawn_interval = max(1400, 2600 - level * 100)
             spawn_timer += dt
             if spawn_timer >= spawn_interval:
                 targets.append(AlienTarget(level))
                 spawn_timer = 0.0
 
-            level = max(1, int(score / 250) + 1)
-            if score > 0 and score % 250 == 0:
-                level_up_display = 90
+            target_level = max(1, int(score / 500) + 1)
+            if target_level > level:
+                level = target_level
+                level_up_display = 1000
 
             if level_up_display > 0:
                 level_up_display -= dt
@@ -568,12 +637,12 @@ async def main():
                 double_timer -= dt
 
             for a in arrows[:]:
-                a.update()
+                a.update(frame_scale)
                 if not a.alive:
                     arrows.remove(a)
 
             for t in targets[:]:
-                t.update()
+                t.update(frame_scale)
                 if t.x < -80:
                     targets.remove(t)
                     if random.random() < 0.18:
@@ -586,7 +655,7 @@ async def main():
                     particles.remove(p)
 
             for p in powerups[:]:
-                p.update()
+                p.update(frame_scale)
                 ship_rect = pygame.Rect(80, int(ship_y) - 20, 45, 45)
                 if p.get_rect().colliderect(ship_rect):
                     if p.kind == "double":
@@ -653,7 +722,7 @@ async def main():
             if game_state == "playing":
                 for _ in range(3):
                     tx = 85 - random.randint(10, 22)
-                    ty = ship_y + random.randint(-6, 6)
+                    ty = int(ship_y + random.randint(-6, 6))
                     pygame.gfxdraw.filled_circle(screen, tx, ty, random.randint(3, 7), (0, 220, 255))
                 draw_ship(screen, ship_y, invincible_timer)
                 if shield_timer > 0:
