@@ -205,6 +205,14 @@ def patch_generated_html(index_path: Path):
         return
 
     html = index_path.read_text(encoding="utf-8")
+    html = html.replace(
+        'src="{{cookiecutter.cdn}}/browserfs.min.js"',
+        'src="https://cdn.jsdelivr.net/npm/browserfs@2.0.0/dist/browserfs.min.js"',
+    )
+    html = html.replace(
+        'src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"',
+        'src="https://cdn.jsdelivr.net/npm/browserfs@2.0.0/dist/browserfs.min.js"',
+    )
     css_start = html.find("<!-- SPACE_X_CUSTOM_CSS_START -->")
     css_end = html.find("<!-- SPACE_X_CUSTOM_CSS_END -->")
     if css_start >= 0 and css_end >= css_start:
