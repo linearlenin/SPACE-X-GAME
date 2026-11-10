@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Space X shooter with arcade progression, fullscreen web support and touch controls."""
 
 import asyncio
