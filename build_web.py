@@ -158,12 +158,12 @@ CUSTOM_CSS = """
         z-index: 5;
         padding: 0;
         margin: 0 auto;
-        position: absolute;
-        top: 50%;
-        bottom: auto;
+        position: fixed !important;
+        top: 50% !important;
+        bottom: auto !important;
         left: 50% !important;
         right: auto !important;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%) !important;
     }
 </style>
 <!-- SPACE_X_CUSTOM_CSS_END -->
