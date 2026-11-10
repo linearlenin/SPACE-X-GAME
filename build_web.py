@@ -45,6 +45,10 @@ CUSTOM_CSS = """
         touch-action: none;
     }
 
+    #infobox {
+        display: none !important;
+    }
+
     #rotate-warning {
         position: fixed;
         left: 0;
@@ -111,6 +115,15 @@ CUSTOM_CSS = """
         overflow: hidden;
     }
 
+    .loading-hint {
+        color: #b8efff;
+        font-size: clamp(0.75rem, 2vw, 1rem);
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
     .loading-fill {
         display: block;
         width: 48%;
@@ -174,6 +187,7 @@ CUSTOM_BODY = """
         <div class="logo-box">
             <div class="space-x-logo">SPACE X</div>
             <div class="loading-bar"><span class="loading-fill"></span></div>
+            <div class="loading-hint">Tap to start · Landscape mode</div>
         </div>
     </div>
     <div id="rotate-warning">Rotate your device to landscape</div>
@@ -191,9 +205,17 @@ CUSTOM_SCRIPT = """
                 loader.style.display = 'none';
             }, 500);
         };
-        setTimeout(hideLoader, 1400);
-        document.addEventListener('pointerdown', hideLoader, { once: true });
-        document.addEventListener('keydown', hideLoader, { once: true });
+        const checkGameReady = setInterval(function () {
+            const canvas = document.getElementById('canvas');
+            if (canvas && canvas.width > 1 && canvas.height > 1) {
+                clearInterval(checkGameReady);
+                hideLoader();
+            }
+        }, 250);
+        setTimeout(function () {
+            clearInterval(checkGameReady);
+            hideLoader();
+        }, 30000);
     });
 </script>
 <!-- SPACE_X_CUSTOM_SCRIPT_END -->
