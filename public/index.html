@@ -1,7 +1,7 @@
 <html lang="en-us"><script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer>#<!--
 
 print("""
-Loading space-x-game from space-x-game.apk 
+Loading space-x-game from space-x-game.apk
     Pygbag Version : 0.9.3
     Template Version : 0.9.3
     Python  : 3.12
@@ -23,7 +23,7 @@ from pathlib import Path
 # do not rename
 async def custom_site():
     import embed
-    platform.document.body.style.background = "#000000"
+    platform.document.body.style.background = "#7f7f7f"
 
     platform.window.transfer.hidden = true
     platform.window.canvas.style.visibility = "visible"
@@ -122,10 +122,24 @@ asyncio.run( custom_site() )
 #
 # do not alter that comment block it is separating python code from html code
 # =============================================================================
-# --></script><head>
+# --></script><head><!--
+//=============================================================================
+//
+//
+//
+//
+//
+//
+//
 
-<script type="application/javascript">
+    {%- if cookiecutter.comment != "" -%}
+{{cookiecutter.comment}}
+    {% endif %}
+
+--><script type="application/javascript">
 // END BLOCK
+
+
 
 // this dict is available under PyConfig.config from __main__
 
@@ -167,23 +181,15 @@ function show_infobox() {
     <title>space-x-game</title>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="height=device-height, initial-scale=1.0">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes"/>
+
 
     <link rel="icon" type="image/png" href="favicon.png" sizes="16x16">
 
     <style>
-        html, body {
-            width: 100vw;
-            height: 100vh;
-            margin: 0;
-            padding: 0;
-            background-color: #000000 !important;
-            overflow: hidden;
-            touch-action: none;
-        }
-
         #status {
             display: inline-block;
             vertical-align: top;
@@ -199,47 +205,247 @@ function show_infobox() {
         }
 
         #infobox {
-            position: fixed;
-            background: #00e5ff;
-            color: #060816;
+            position: fixed; /* center relative to viewport */
+            background: green;
+            color: blue;
             font-weight: bold;
             padding: 12px 24px;
-            border-radius: 8px;
+ /*           display: none; */
             z-index: 999999;
         }
-
         div.emscripten { text-align: center; }
+        div.emscripten_border { border: 1px solid black; }
+        div.thick_border { border: 4px solid black; }
 
-        /* Full Screen Canvas Scaling Fix */
+        /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+        /* average size of droid screen 470dp x 320dp  */
         canvas.emscripten {
             border: 0px none;
-            background-color: #060816;
-            width: 100vw !important;
-            height: 100vh !important;
-            object-fit: fill !important; /* Screen fit stretches edge-to-edge */
+            background-color: transparent;
+            width: 100%;
+            height: 100%;
             z-index: 5;
+
             padding: 0;
             margin: 0 auto;
+
             position: absolute;
             top: 0;
             bottom: 0;
             left: 0;
             right: 0;
         }
+
+        body {
+            font-family: arial;
+            margin: 0;
+            padding: none;
+            background-color:powderblue;
+        }
+
+        .topright{
+           position:absolute;
+           top:0px;
+           right:0px;
+        }
+
+        .bottomright {
+            position:absolute;
+            top: 40%;
+            right: 0px;
+        }
+
+        .center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .trinfo{
+           position: relative;
+           right: 0px;
+           border: 1px solid black;
+        }
+
+        .framed{
+           position: relative;
+           top: 150px;
+           right: 10px;
+           border: 1px solid black;
+        }
     </style>
+
+    <script>
+/*
+        if (navigator.serviceWorker)
+            navigator.serviceWorker.register("https://pygame-web.github.io/cdn/0.9.3/pygbag0.9.3.js")
+        else
+            console.warn("Service workers not supported")
+*/
+    </script>
 
     <script src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"></script>
 
+
+<style>
+    html, body {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        background: radial-gradient(circle at top, #07152d 0%, #020814 45%, #000 100%) !important;
+        overflow: hidden;
+        font-family: Arial, Helvetica, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: none;
+    }
+
+    body, canvas, * {
+        -webkit-user-select: none;
+        user-select: none;
+        touch-action: none;
+    }
+
+    #rotate-warning {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 24px;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        color: #dfeeff;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
+        z-index: 9999;
+    }
+
+    @media (orientation: portrait) {
+        #rotate-warning {
+            display: flex;
+        }
+    }
+
+    #game-loading-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, rgba(16, 44, 80, 0.9), rgba(1, 4, 14, 0.98));
+        z-index: 9998;
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+    }
+
+    #game-loading-shell.hidden {
+        opacity: 0;
+    }
+
+    .logo-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .space-x-logo {
+        font-size: clamp(2.7rem, 6vw, 7rem);
+        letter-spacing: 0.35em;
+        font-weight: 900;
+        color: #5af0ff;
+        text-shadow: 0 0 18px rgba(90, 240, 255, 0.9), 0 0 32px rgba(82, 195, 255, 0.7);
+    }
+
+    .loading-bar {
+        width: min(54vw, 520px);
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(170, 200, 240, 0.15);
+        box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+    }
+
+    .loading-fill {
+        display: block;
+        width: 48%;
+        height: 100%;
+        background: linear-gradient(90deg, #68ffe5 0%, #3bd7ff 45%, #7fb4ff 100%);
+        border-radius: inherit;
+        box-shadow: 0 0 20px rgba(88, 228, 255, 0.9);
+        animation: pulse-loading 1.4s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-loading {
+        from {
+            transform: translateX(-2%);
+            opacity: 0.8;
+        }
+        to {
+            transform: translateX(2%);
+            opacity: 1;
+        }
+    }
+
+    #status {
+        position: relative;
+        color: #b8efff;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-top: 20px;
+        margin-left: 30px;
+    }
+
+    div.emscripten {
+        text-align: center;
+    }
+
+    canvas.emscripten {
+        border: 0px none;
+        background: transparent;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        object-fit: fill !important;
+        z-index: 5;
+        padding: 0;
+        margin: 0 auto;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%);
+    }
+</style>
 </head>
 
 <body>
+    <div id="game-loading-shell">
+        <div class="logo-box">
+            <div class="space-x-logo">SPACE X</div>
+            <div class="loading-bar"><span class="loading-fill"></span></div>
+        </div>
+    </div>
+    <div id="rotate-warning">Rotate your device to landscape</div>
+
 
     <div id="transfer" align=center>
+<!--        <div class="spinner" id='spinner'></div> -->
         <div class="emscripten" id="status">Downloading...</div>
         <div class="emscripten">
             <progress value="0" max="100" id="progress"></progress>
         </div>
     </div>
+
+
 
     <canvas class="emscripten" id="canvas"
 width="1px"
@@ -257,7 +463,8 @@ height="720px"
 
     <div id=html></div>
 
-    <div id=crt class=bottomright>
+    <div id=crt  class=bottomright >
+
         <div id="system" hidden>
             <div class="button-container">
                 <button id="aiostop" disabled>AIO ⏏︎</button>
@@ -275,9 +482,11 @@ height="720px"
 
             <div id="level">(battery level unknown)</div>
             <div id="stateBattery">(charging state unknown)</div>
+
         </div>
 
         <div id=box class="emscripten_border" hidden=true>
+
             <div id="info" class="trinfo"></div>
 
             <iframe id="iframe" class="framed" name="iframe"
@@ -296,7 +505,9 @@ frameborder="1"
                 scrolling="yes">
             </iframe>
         </div>
+
     </div>
+
 
     <div id="dlg" hidden>
         <input type="file" id="dlg_multifile" multiple accept="image/*">
@@ -308,11 +519,14 @@ frameborder="1"
     </div>
 
     <script type="application/javascript">
+
     globalThis.__canvas_resized = (self, ecw, ech) => {
         console.warn("TODO: panda3d canvas monitor", self, ecw, ech)
     }
 
     async function custom_onload(debug_hidden) {
+        // this is called before anything python is loaded
+        // make your js customization here
         console.log(__FILE__, "custom_onload")
 
         pyconsole.hidden = debug_hidden
@@ -325,14 +539,20 @@ frameborder="1"
     }
 
     function custom_prerun(){
+        // no python main and no (MEMFS + VFS) yet.
         console.log(__FILE__, "custom_prerun")
+
     }
 
     function custom_postrun(){
+        // python main and no VFS filesystem yet.
         console.log(__FILE__, "custom_postrun")
+
     }
 
     function debug() {
+        // allow to gain access to dev tools from js console
+        // but only on desktop. difficult to reach when in iframe
         python.config.debug = true
         custom_onload(false)
         Module.PyRun_SimpleString("shell.uptime()")
@@ -344,7 +564,8 @@ frameborder="1"
     }
 
     function info_online(url) {
-        fetch(url)
+        // display info about current APK
+        fetch( url /*, options */)
             .then((response) => response.text())
             .then((html) => {
                 info_inline(html);
@@ -357,6 +578,24 @@ frameborder="1"
     function frame_online(url) {
         window.frames["iframe"].location = url;
     }
+
     </script>
+
+
+<script>
+    window.addEventListener('load', function () {
+        const loader = document.getElementById('game-loading-shell');
+        const hideLoader = function () {
+            if (!loader) return;
+            loader.classList.add('hidden');
+            setTimeout(function () {
+                loader.style.display = 'none';
+            }, 500);
+        };
+        setTimeout(hideLoader, 1400);
+        document.addEventListener('pointerdown', hideLoader, { once: true });
+        document.addEventListener('keydown', hideLoader, { once: true });
+    });
+</script>
 </body>
 </html>

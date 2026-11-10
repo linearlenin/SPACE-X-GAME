@@ -286,9 +286,156 @@ function show_infobox() {
 
     <script src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"></script>
 
+
+<style>
+    html, body {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        background: radial-gradient(circle at top, #07152d 0%, #020814 45%, #000 100%) !important;
+        overflow: hidden;
+        font-family: Arial, Helvetica, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: none;
+    }
+
+    body, canvas, * {
+        -webkit-user-select: none;
+        user-select: none;
+        touch-action: none;
+    }
+
+    #rotate-warning {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 24px;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        color: #dfeeff;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
+        z-index: 9999;
+    }
+
+    @media (orientation: portrait) {
+        #rotate-warning {
+            display: flex;
+        }
+    }
+
+    #game-loading-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, rgba(16, 44, 80, 0.9), rgba(1, 4, 14, 0.98));
+        z-index: 9998;
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+    }
+
+    #game-loading-shell.hidden {
+        opacity: 0;
+    }
+
+    .logo-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .space-x-logo {
+        font-size: clamp(2.7rem, 6vw, 7rem);
+        letter-spacing: 0.35em;
+        font-weight: 900;
+        color: #5af0ff;
+        text-shadow: 0 0 18px rgba(90, 240, 255, 0.9), 0 0 32px rgba(82, 195, 255, 0.7);
+    }
+
+    .loading-bar {
+        width: min(54vw, 520px);
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(170, 200, 240, 0.15);
+        box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+    }
+
+    .loading-fill {
+        display: block;
+        width: 48%;
+        height: 100%;
+        background: linear-gradient(90deg, #68ffe5 0%, #3bd7ff 45%, #7fb4ff 100%);
+        border-radius: inherit;
+        box-shadow: 0 0 20px rgba(88, 228, 255, 0.9);
+        animation: pulse-loading 1.4s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-loading {
+        from {
+            transform: translateX(-2%);
+            opacity: 0.8;
+        }
+        to {
+            transform: translateX(2%);
+            opacity: 1;
+        }
+    }
+
+    #status {
+        position: relative;
+        color: #b8efff;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-top: 20px;
+        margin-left: 30px;
+    }
+
+    div.emscripten {
+        text-align: center;
+    }
+
+    canvas.emscripten {
+        border: 0px none;
+        background: transparent;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        object-fit: fill !important;
+        z-index: 5;
+        padding: 0;
+        margin: 0 auto;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%);
+    }
+</style>
 </head>
 
 <body>
+    <div id="game-loading-shell">
+        <div class="logo-box">
+            <div class="space-x-logo">SPACE X</div>
+            <div class="loading-bar"><span class="loading-fill"></span></div>
+        </div>
+    </div>
+    <div id="rotate-warning">Rotate your device to landscape</div>
+
 
     <div id="transfer" align=center>
 <!--        <div class="spinner" id='spinner'></div> -->
@@ -434,5 +581,21 @@ frameborder="1"
 
     </script>
 
+
+<script>
+    window.addEventListener('load', function () {
+        const loader = document.getElementById('game-loading-shell');
+        const hideLoader = function () {
+            if (!loader) return;
+            loader.classList.add('hidden');
+            setTimeout(function () {
+                loader.style.display = 'none';
+            }, 500);
+        };
+        setTimeout(hideLoader, 1400);
+        document.addEventListener('pointerdown', hideLoader, { once: true });
+        document.addEventListener('keydown', hideLoader, { once: true });
+    });
+</script>
 </body>
 </html>

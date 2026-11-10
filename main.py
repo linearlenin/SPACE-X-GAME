@@ -1,20 +1,17 @@
-#!/usr/bin/env python3
-"""
-main.py - Space Shooter (Vercel Web + Audio + Mobile Responsive Edition)
-Fix: Locked Horizontal Straight Laser Fire Mechanism
-"""
+﻿#!/usr/bin/env python3
+"""Space X shooter with arcade progression, fullscreen web support and touch controls."""
 
 import asyncio
-import pygame
-import pygame.gfxdraw
-import sys
-import random
+import json
 import math
 import os
+import random
+import sys
+from pathlib import Path
 
-# -----------------------------
-# Initialization & Display
-# -----------------------------
+import pygame
+import pygame.gfxdraw
+
 pygame.init()
 pygame.mixer.init()
 pygame.font.init()
@@ -24,42 +21,79 @@ SCREEN_HEIGHT = 720
 FPS = 60
 
 window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED | pygame.RESIZABLE)
-pygame.display.set_caption("Space Shooter")
+pygame.display.set_caption("SPACE X")
 screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = pygame.time.Clock()
 
 FONT = pygame.font.SysFont("Consolas", 22, bold=True)
 BIG_FONT = pygame.font.SysFont("Impact", 64)
 LEVEL_FONT = pygame.font.SysFont("Impact", 80)
+HUD_FONT = pygame.font.SysFont("Verdana", 30, bold=True)
+TITLE_FONT = pygame.font.SysFont("Impact", 120)
 
-# Load Sound Effects
+SAVE_PATH = Path(__file__).with_name("space_x_game_save.json")
+
+
 def load_sound(filename):
     path = os.path.join("audio", filename)
     if os.path.exists(path):
         try:
             return pygame.mixer.Sound(path)
-        except Exception as e:
-            print(f"Error loading sound {path}: {e}")
+        except Exception as exc:  # pragma: no cover - runtime-only audio error
+            print(f"Error loading sound {path}: {exc}")
     return None
+
 
 SOUND_SHOOT = load_sound("shoot.wav")
 SOUND_HIT = load_sound("hit.wav")
 SOUND_MISS = load_sound("miss.wav")
 
-def play_sound(snd):
-    if snd:
-        snd.play()
 
-# -----------------------------
-# Parallax Starfield Background
-# -----------------------------
+def play_sound(snd):
+    if snd and pygame.mixer.get_init() is not None:
+        try:
+            snd.play()
+        except Exception:  # pragma: no cover - browser environment can ignore this
+            pass
+
+
+def unlock_audio():
+    if pygame.mixer.get_init() is None:
+        return
+    try:
+        if SOUND_SHOOT:
+            SOUND_SHOOT.play()
+            SOUND_SHOOT.stop()
+    except Exception:  # pragma: no cover
+        pass
+
+
+def load_high_score():
+    if not SAVE_PATH.exists():
+        return 0
+    try:
+        data = json.loads(SAVE_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return int(data.get("high_score", 0))
+        return int(data)
+    except Exception:
+        return 0
+
+
+def save_high_score(value):
+    try:
+        SAVE_PATH.write_text(json.dumps({"high_score": int(value)}), encoding="utf-8")
+    except Exception:  # pragma: no cover - filesystem may be read-only in some envs
+        pass
+
+
 class ParallaxSpace:
     def __init__(self):
         self.stars = []
-        for _ in range(160):
+        for _ in range(180):
             x = random.randint(0, SCREEN_WIDTH)
             y = random.randint(0, SCREEN_HEIGHT)
-            speed = random.uniform(0.5, 3.5)
+            speed = random.uniform(0.6, 4.2)
             size = max(1, int(speed * 0.9))
             alpha = int(speed * 70)
             self.stars.append([x, y, speed, size, alpha])
@@ -77,19 +111,17 @@ class ParallaxSpace:
             col = (200, 230, 255)
             pygame.gfxdraw.filled_circle(surface, int(x), int(y), size, (*col, alpha))
 
-# -----------------------------
-# Glow Particles
-# -----------------------------
+
 class GlowParticle:
     def __init__(self, x, y, color):
         self.x = x
         self.y = y
         angle = random.uniform(0, math.tau)
-        speed = random.uniform(3, 10)
+        speed = random.uniform(3, 11)
         self.vx = math.cos(angle) * speed
         self.vy = math.sin(angle) * speed
         self.color = color
-        self.life = random.randint(18, 35)
+        self.life = random.randint(18, 40)
         self.age = 0
         self.radius = random.randint(4, 9)
 
@@ -101,156 +133,249 @@ class GlowParticle:
     def draw(self, surface):
         if self.age < self.life:
             alpha = max(0, int(255 * (1.0 - self.age / self.life)))
-            r = max(1, int(self.radius * (1.0 - self.age / self.life)))
-            p_surf = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
-            pygame.gfxdraw.filled_circle(p_surf, r * 2, r * 2, r, (*self.color, alpha))
-            pygame.gfxdraw.filled_circle(p_surf, r * 2, r * 2, max(1, r // 2), (255, 255, 255, alpha))
-            surface.blit(p_surf, (int(self.x - r * 2), int(self.y - r * 2)), special_flags=pygame.BLEND_ADD)
+            radius = max(1, int(self.radius * (1.0 - self.age / self.life)))
+            particle_surface = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
+            pygame.gfxdraw.filled_circle(particle_surface, radius * 2, radius * 2, radius, (*self.color, alpha))
+            pygame.gfxdraw.filled_circle(particle_surface, radius * 2, radius * 2, max(1, radius // 2), (255, 255, 255, alpha))
+            surface.blit(particle_surface, (int(self.x - radius * 2), int(self.y - radius * 2)), special_flags=pygame.BLEND_ADD)
 
-# -----------------------------
-# Lasers (STRICTLY HORIZONTAL)
-# -----------------------------
+
 class LaserArrow:
-    def __init__(self, x, y, speed):
+    def __init__(self, x, y, speed, double_shot=False):
         self.x = float(x)
         self.y = float(y)
         self.speed = float(speed)
         self.alive = True
+        self.double_shot = double_shot
 
     def update(self):
-        # Absolutely locked Y axis, moves ONLY to the RIGHT
         self.x += self.speed
-        if self.x > SCREEN_WIDTH + 60:
+        if self.x > SCREEN_WIDTH + 100:
             self.alive = False
 
     def draw(self, surface):
         cx, cy = int(self.x), int(self.y)
-        length = 32
-
-        glow_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
-        pygame.gfxdraw.filled_circle(glow_surf, 30, 30, 16, (0, 255, 220, 70))
-        pygame.gfxdraw.filled_circle(glow_surf, 30, 30, 7, (255, 255, 255, 200))
-        surface.blit(glow_surf, (cx - 30, cy - 30), special_flags=pygame.BLEND_ADD)
-
-        # Draw perfectly horizontal laser line
-        end_x = cx - length
-        end_y = cy
-        pygame.draw.line(surface, (0, 255, 220), (cx, cy), (end_x, end_y), 5)
-        pygame.draw.line(surface, (255, 255, 255), (cx, cy), (end_x, end_y), 2)
+        pygame.gfxdraw.filled_circle(surface, cx, cy, 7, (50, 255, 220))
+        pygame.gfxdraw.filled_circle(surface, cx, cy, 12, (0, 255, 220, 90))
+        pygame.draw.line(surface, (0, 255, 220), (cx, cy), (cx - 32, cy), 5)
+        pygame.draw.line(surface, (255, 255, 255), (cx, cy), (cx - 32, cy), 2)
 
     def get_rect(self):
-        return pygame.Rect(int(self.x - 16), int(self.y - 8), 32, 16)
+        return pygame.Rect(int(self.x - 24), int(self.y - 8), 38, 16)
 
-# -----------------------------
-# Enemy Targets
-# -----------------------------
+
+class PowerUp:
+    def __init__(self, x, y, kind):
+        self.x = x
+        self.y = y
+        self.kind = kind
+        self.speed = 2.3
+        self.alive = True
+        self.width = 20
+        self.height = 20
+
+    def update(self):
+        self.x -= self.speed
+        if self.x < -40:
+            self.alive = False
+
+    def draw(self, surface):
+        cx, cy = int(self.x), int(self.y)
+        color = {"double": (255, 190, 70), "shield": (90, 190, 255), "+life": (255, 100, 125)}.get(self.kind, (255, 255, 255))
+        pygame.draw.rect(surface, color, (cx - 18, cy - 10, 36, 20), border_radius=8)
+        pygame.draw.rect(surface, (25, 25, 25), (cx - 12, cy - 4, 24, 8), border_radius=4)
+        label = {"double": "2x", "shield": "S", "+life": "+1"}.get(self.kind, "?")
+        text = FONT.render(label, True, (10, 10, 20))
+        surface.blit(text, (cx - text.get_width() // 2, cy - text.get_height() // 2 + 1))
+
+    def get_rect(self):
+        return pygame.Rect(int(self.x - 18), int(self.y - 10), 36, 20)
+
+
 class AlienTarget:
     def __init__(self, level):
         self.x = SCREEN_WIDTH + 60
         self.y = random.randint(80, SCREEN_HEIGHT - 120)
-        self.type = random.choice([1, 2, 3])
+        self.phase = random.random() * math.tau
+        self.kind = "standard"
         self.alive = True
-        base_speed = random.uniform(3.0, 5.0)
-        self.speed = base_speed + (level * 0.7)
 
-        if self.type == 1:
-            self.radius = 18
-            self.color = (255, 50, 100)
-            self.score_val = 10
-        elif self.type == 2:
-            self.radius = 26
-            self.color = (50, 180, 255)
-            self.score_val = 20
+        if level >= 5 and random.random() < 0.18:
+            self.kind = "boss"
+            self.radius = 68
+            self.color = (255, 90, 140)
+            self.score_val = 200
+            self.speed = 2.2 + level * 0.15
+            self.health = 4
         else:
-            self.radius = 36
-            self.color = (255, 210, 0)
-            self.score_val = 30
+            roll = random.random()
+            if level >= 3 and roll < 0.28:
+                self.kind = "zigzag"
+                self.radius = 22
+                self.color = (50, 180, 255)
+                self.score_val = 25
+                self.speed = 4.1 + level * 0.4
+            elif level >= 2 and roll < 0.52:
+                self.kind = "fast"
+                self.radius = 16
+                self.color = (255, 120, 70)
+                self.score_val = 15
+                self.speed = 5.6 + level * 0.45
+            else:
+                self.kind = "heavy"
+                self.radius = 30
+                self.color = (255, 210, 0)
+                self.score_val = 30
+                self.speed = 3.2 + level * 0.5
+
+        if self.kind == "boss":
+            self.width = 150
+            self.height = 80
+        else:
+            self.width = self.radius * 2
+            self.height = self.radius * 2
 
     def update(self):
         self.x -= self.speed
-        if self.x < -60:
+        if self.kind in {"zigzag", "boss"}:
+            self.y += math.sin((self.x / 30.0) + self.phase) * 1.8
+        if self.x < -150:
             self.alive = False
 
     def draw(self, surface):
         cx, cy = int(self.x), int(self.y)
-        t = pygame.time.get_ticks() / 150.0
+        if self.kind == "boss":
+            glow = pygame.Surface((180, 120), pygame.SRCALPHA)
+            pygame.gfxdraw.filled_circle(glow, 90, 60, 60, (*self.color, 60))
+            surface.blit(glow, (cx - 90, cy - 60), special_flags=pygame.BLEND_ADD)
+            body = pygame.Rect(cx - 70, cy - 38, 140, 76)
+            pygame.draw.ellipse(surface, self.color, body)
+            pygame.draw.ellipse(surface, (255, 255, 255), body, 3)
+            eye_y = cy - 5
+            pygame.draw.circle(surface, (0, 0, 0), (cx - 28, eye_y), 7)
+            pygame.draw.circle(surface, (0, 0, 0), (cx + 28, eye_y), 7)
+            pygame.draw.line(surface, (255, 255, 255), (cx - 18, cy + 18), (cx + 18, cy + 18), 4)
+            return
 
-        glow_surf = pygame.Surface((self.radius * 3, self.radius * 3), pygame.SRCALPHA)
-        pygame.gfxdraw.filled_circle(glow_surf, self.radius * 3 // 2, self.radius * 3 // 2, self.radius, (*self.color, 60))
-        surface.blit(glow_surf, (cx - self.radius * 3 // 2, cy - self.radius * 3 // 2), special_flags=pygame.BLEND_ADD)
+        base = pygame.Surface((self.radius * 3, self.radius * 3), pygame.SRCALPHA)
+        pygame.gfxdraw.filled_circle(base, self.radius * 3 // 2, self.radius * 3 // 2, self.radius, (*self.color, 80))
+        surface.blit(base, (cx - self.radius * 3 // 2, cy - self.radius * 3 // 2), special_flags=pygame.BLEND_ADD)
 
-        if self.type == 1:
-            pts = [(cx - 18, cy), (cx + 15, cy - 12), (cx + 5, cy), (cx + 15, cy + 12)]
+        if self.kind == "standard":
+            pts = [(cx - self.radius, cy), (cx + self.radius, cy - self.radius * 0.7), (cx + self.radius * 0.7, cy), (cx + self.radius, cy + self.radius * 0.7)]
             pygame.draw.polygon(surface, self.color, pts)
-            pygame.gfxdraw.filled_circle(surface, cx - 4, cy, 5, (255, 255, 255))
-        elif self.type == 2:
-            pygame.gfxdraw.filled_ellipse(surface, cx, cy, 26, 13, self.color)
-            pygame.gfxdraw.filled_circle(surface, cx, cy - 5, 8, (255, 255, 255))
-            pulse_x = cx + int(math.sin(t) * 14)
-            pygame.gfxdraw.filled_circle(surface, pulse_x, cy + 4, 3, (255, 0, 0))
+            pygame.gfxdraw.filled_circle(surface, cx - 5, cy, max(4, self.radius // 3), (255, 255, 255))
+        elif self.kind == "zigzag":
+            pygame.gfxdraw.filled_ellipse(surface, cx, cy, self.radius + 8, self.radius - 4, self.color)
+            blink = cx + int(math.sin((self.x + self.phase) / 14.0) * 18)
+            pygame.gfxdraw.filled_circle(surface, blink, cy + 4, 4, (255, 0, 0))
+        elif self.kind == "fast":
+            pygame.gfxdraw.filled_ellipse(surface, cx, cy, self.radius + 10, self.radius - 2, self.color)
+            pygame.draw.line(surface, (255, 255, 255), (cx - self.radius, cy), (cx + self.radius, cy), 3)
         else:
-            pygame.gfxdraw.filled_ellipse(surface, cx, cy, 38, 18, (150, 40, 220))
-            pts = [(cx - 28, cy - 8), (cx + 25, cy), (cx - 28, cy + 8)]
-            pygame.draw.polygon(surface, self.color, pts)
-            pygame.gfxdraw.filled_circle(surface, cx - 10, cy, 10, (0, 255, 220))
+            pygame.gfxdraw.filled_ellipse(surface, cx, cy, self.radius + 10, self.radius - 4, self.color)
+            pygame.gfxdraw.filled_circle(surface, cx - 8, cy, 8, (0, 255, 220))
 
     def get_rect(self):
-        return pygame.Rect(int(self.x - self.radius), int(self.y - self.radius), self.radius * 2, self.radius * 2)
+        return pygame.Rect(int(self.x - self.width / 2), int(self.y - self.height / 2), self.width, self.height)
 
-# -----------------------------
-# Touch Controls HUD
-# -----------------------------
+
 class ControlsHUD:
     def __init__(self):
-        self.btn_up = pygame.Rect(50, SCREEN_HEIGHT - 230, 90, 90)
-        self.btn_down = pygame.Rect(50, SCREEN_HEIGHT - 120, 90, 90)
-        self.btn_fire = pygame.Rect(SCREEN_WIDTH - 160, SCREEN_HEIGHT - 160, 120, 120)
+        self.btn_up = pygame.Rect(44, SCREEN_HEIGHT - 226, 88, 88)
+        self.btn_down = pygame.Rect(44, SCREEN_HEIGHT - 120, 88, 88)
+        self.btn_fire = pygame.Rect(SCREEN_WIDTH - 156, SCREEN_HEIGHT - 160, 120, 120)
+        self.btn_pause = pygame.Rect(SCREEN_WIDTH - 90, 24, 56, 56)
 
-    def draw(self, surface, charging):
-        hud_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        
-        # UP Button
-        pygame.gfxdraw.filled_circle(hud_surf, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 40))
-        pygame.gfxdraw.aacircle(hud_surf, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surf, (255, 255, 255, 200), [(95, SCREEN_HEIGHT - 215), (70, SCREEN_HEIGHT - 175), (120, SCREEN_HEIGHT - 175)])
+    def draw(self, surface, charging, paused):
+        hud_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
-        # DOWN Button
-        pygame.gfxdraw.filled_circle(hud_surf, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 40))
-        pygame.gfxdraw.aacircle(hud_surf, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surf, (255, 255, 255, 200), [(95, SCREEN_HEIGHT - 50), (70, SCREEN_HEIGHT - 90), (120, SCREEN_HEIGHT - 90)])
+        pygame.gfxdraw.filled_circle(hud_surface, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 40))
+        pygame.gfxdraw.aacircle(hud_surface, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 120))
+        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [(82, SCREEN_HEIGHT - 203), (56, SCREEN_HEIGHT - 160), (108, SCREEN_HEIGHT - 160)])
 
-        # FIRE Button
-        f_color = (255, 60, 80, 200) if charging else (255, 255, 255, 60)
-        pygame.gfxdraw.filled_circle(hud_surf, self.btn_fire.centerx, self.btn_fire.centery, 55, f_color)
-        pygame.gfxdraw.aacircle(hud_surf, self.btn_fire.centerx, self.btn_fire.centery, 55, (255, 80, 80, 240))
-        
-        lbl = FONT.render("FIRE", True, (255, 255, 255))
-        hud_surf.blit(lbl, (self.btn_fire.centerx - lbl.get_width() // 2, self.btn_fire.centery - lbl.get_height() // 2))
+        pygame.gfxdraw.filled_circle(hud_surface, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 40))
+        pygame.gfxdraw.aacircle(hud_surface, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 120))
+        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [(82, SCREEN_HEIGHT - 62), (56, SCREEN_HEIGHT - 100), (108, SCREEN_HEIGHT - 100)])
 
-        surface.blit(hud_surf, (0, 0))
+        fire_color = (255, 60, 80, 200) if charging else (255, 255, 255, 60)
+        pygame.gfxdraw.filled_circle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, 55, fire_color)
+        pygame.gfxdraw.aacircle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, 55, (255, 80, 80, 240))
+        fire_label = FONT.render("FIRE", True, (255, 255, 255))
+        hud_surface.blit(fire_label, (self.btn_fire.centerx - fire_label.get_width() // 2, self.btn_fire.centery - fire_label.get_height() // 2))
 
-# -----------------------------
-# Main Game Loop
-# -----------------------------
+        pygame.draw.rect(hud_surface, (25, 25, 35, 180), self.btn_pause, border_radius=14)
+        if paused:
+            pygame.draw.polygon(hud_surface, (255, 255, 255, 220), [(SCREEN_WIDTH - 72, 40), (SCREEN_WIDTH - 72, 66), (SCREEN_WIDTH - 52, 53)])
+        else:
+            pygame.draw.rect(hud_surface, (255, 255, 255, 220), (SCREEN_WIDTH - 75, 39, 7, 27), border_radius=3)
+            pygame.draw.rect(hud_surface, (255, 255, 255, 220), (SCREEN_WIDTH - 58, 39, 7, 27), border_radius=3)
+
+        surface.blit(hud_surface, (0, 0))
+
+
+def draw_ship(surface, ship_y, invincible_timer):
+    flicker = invincible_timer > 0 and (pygame.time.get_ticks() // 80) % 2 == 0
+    if flicker:
+        return
+
+    ship_pts = [(125, int(ship_y)), (80, int(ship_y) - 22), (90, int(ship_y)), (80, int(ship_y) + 22)]
+    pygame.draw.polygon(surface, (0, 220, 255), ship_pts)
+    pygame.draw.polygon(surface, (255, 255, 255), ship_pts, 2)
+    pygame.gfxdraw.filled_ellipse(surface, 95, int(ship_y), 12, 6, (255, 255, 255))
+
+
+def draw_charge_bar(surface, ship_y, power):
+    fill = int((min(power, 20.0) / 20.0) * 120)
+    bar_rect = pygame.Rect(60, int(ship_y) - 45, 120, 8)
+    pygame.draw.rect(surface, (40, 40, 40), bar_rect, border_radius=4)
+    pygame.draw.rect(surface, (0, 255, 180), (bar_rect.x, bar_rect.y, fill, bar_rect.height), border_radius=4)
+
+
+def draw_hud(surface, score, lives, level, high_score, state, shield_timer, double_timer, power, ship_y):
+    score_text = HUD_FONT.render(f"SCORE {score}", True, (255, 255, 255))
+    high_score_text = HUD_FONT.render(f"BEST {high_score}", True, (125, 214, 255))
+    lives_text = HUD_FONT.render("".join("♥" for _ in range(max(0, min(5, lives)))), True, (255, 95, 95))
+    level_text = HUD_FONT.render(f"LEVEL {level}", True, (0, 255, 180))
+
+    surface.blit(score_text, (20, 18))
+    surface.blit(high_score_text, (SCREEN_WIDTH - 200, 18))
+    surface.blit(lives_text, (20, 50))
+    surface.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2, 18))
+
+    if shield_timer > 0:
+        shield_box = FONT.render("SHIELD", True, (120, 220, 255))
+        surface.blit(shield_box, (SCREEN_WIDTH - 160, 58))
+    if double_timer > 0:
+        double_box = FONT.render("2X FIRE", True, (255, 210, 115))
+        surface.blit(double_box, (SCREEN_WIDTH - 160, 82))
+    if state == "playing":
+        draw_charge_bar(surface, ship_y, power)
+
+
+def draw_menu(surface, title_alpha):
+    surface.fill((6, 8, 22))
+    title = TITLE_FONT.render("SPACE X", True, (32, 220, 255))
+    title_shadow = TITLE_FONT.render("SPACE X", True, (0, 0, 0))
+    title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 120))
+    surface.blit(title_shadow, (title_rect.x + 6, title_rect.y + 6))
+    surface.blit(title, title_rect)
+
+    subtitle = HUD_FONT.render("PRESS SPACE OR TAP TO START", True, (255, 255, 255))
+    surface.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, SCREEN_HEIGHT // 2 + 40))
+
+    bar_bg = pygame.Rect(SCREEN_WIDTH // 2 - 220, SCREEN_HEIGHT // 2 + 100, 440, 18)
+    pygame.draw.rect(surface, (35, 35, 40), bar_bg, border_radius=9)
+    progress = min(1.0, (title_alpha % 180) / 180.0)
+    pygame.draw.rect(surface, (0, 255, 170), (bar_bg.x, bar_bg.y, int(bar_bg.width * progress), bar_bg.height), border_radius=9)
+
+
 async def main():
     space_bg = ParallaxSpace()
     controls_hud = ControlsHUD()
-
-    def reset_game():
-        nonlocal ship_y, lives, score, level, arrows, targets, particles, power, charging, game_over, spawn_timer, level_up_display, shake_timer
-        ship_y = SCREEN_HEIGHT // 2
-        lives = 5
-        score = 0
-        level = 1
-        arrows = []
-        targets = []
-        particles = []
-        power = 0.0
-        charging = False
-        game_over = False
-        spawn_timer = 0
-        level_up_display = 0
-        shake_timer = 0
+    high_score = load_high_score()
+    game_state = "menu"
+    title_alpha = 0
 
     ship_y = SCREEN_HEIGHT // 2
     lives = 5
@@ -259,178 +384,335 @@ async def main():
     arrows = []
     targets = []
     particles = []
-
+    powerups = []
     power = 0.0
     charging = False
-    game_over = False
-    
-    spawn_timer = 0
+    spawn_timer = 0.0
     level_up_display = 0
     shake_timer = 0
+    fire_repeat = 0.0
+    invincible_timer = 0.0
+    shield_timer = 0.0
+    double_timer = 0.0
+    move_up = False
+    move_down = False
+    fire_held = False
+
+    def reset_game():
+        nonlocal ship_y, lives, score, level, arrows, targets, particles, powerups, power, charging, spawn_timer, level_up_display, shake_timer, fire_repeat, invincible_timer, shield_timer, double_timer, move_up, move_down, fire_held
+        ship_y = SCREEN_HEIGHT // 2
+        lives = 5
+        score = 0
+        level = 1
+        arrows = []
+        targets = []
+        particles = []
+        powerups = []
+        power = 0.0
+        charging = False
+        spawn_timer = 0.0
+        level_up_display = 0
+        shake_timer = 0
+        fire_repeat = 0.0
+        invincible_timer = 0.0
+        shield_timer = 0.0
+        double_timer = 0.0
+        move_up = False
+        move_down = False
+        fire_held = False
 
     while True:
         dt = clock.tick(FPS)
+        title_alpha += dt
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE: 
-                    pygame.quit()
-                    sys.exit()
-                
-                if game_over:
-                    if event.key == pygame.K_r:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if game_state == "playing":
+                        game_state = "paused"
+                    else:
+                        pygame.quit()
+                        sys.exit()
+                elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                    unlock_audio()
+                    if game_state == "menu":
+                        game_state = "playing"
                         reset_game()
-                else:
+                    elif game_state == "game_over":
+                        reset_game()
+                        game_state = "playing"
+                    elif game_state == "paused":
+                        game_state = "playing"
+                elif event.key == pygame.K_p:
+                    if game_state == "playing":
+                        game_state = "paused"
+                    elif game_state == "paused":
+                        game_state = "playing"
+                elif game_state == "playing":
+                    if event.key in (pygame.K_w, pygame.K_UP):
+                        move_up = True
+                    if event.key in (pygame.K_s, pygame.K_DOWN):
+                        move_down = True
                     if event.key == pygame.K_SPACE:
-                        # Space bar tap -> Straight Horizontal Laser
-                        arrows.append(LaserArrow(125, ship_y, 24))
-                        play_sound(SOUND_SHOOT)
-
-            elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
-                mpos = pygame.mouse.get_pos()
-                if game_over:
-                    reset_game()
-                else:
-                    if controls_hud.btn_fire.collidepoint(mpos):
+                        fire_held = True
                         charging = True
+                if event.key == pygame.K_r and game_state == "game_over":
+                    reset_game()
+                    game_state = "playing"
 
-            elif event.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
-                if not game_over and charging:
-                    # Shoot straight horizontal laser at calculated charge speed
-                    pwr_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
-                    arrows.append(LaserArrow(125, ship_y, pwr_speed))
-                    play_sound(SOUND_SHOOT)
-                    power = 0.0
-                    charging = False
+            if event.type == pygame.KEYUP:
+                if event.key in (pygame.K_w, pygame.K_UP):
+                    move_up = False
+                if event.key in (pygame.K_s, pygame.K_DOWN):
+                    move_down = False
+                if event.key == pygame.K_SPACE:
+                    fire_held = False
+                    if charging and game_state == "playing":
+                        shot_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
+                        arrows.append(LaserArrow(125, ship_y, shot_speed))
+                        play_sound(SOUND_SHOOT)
+                        power = 0.0
+                        charging = False
+
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+                unlock_audio()
+                if game_state == "menu":
+                    game_state = "playing"
+                    reset_game()
+                elif game_state == "game_over":
+                    reset_game()
+                    game_state = "playing"
+                else:
+                    pos = pygame.mouse.get_pos()
+                    if controls_hud.btn_fire.collidepoint(pos):
+                        charging = True
+                        fire_held = True
+                    elif controls_hud.btn_pause.collidepoint(pos):
+                        if game_state == "playing":
+                            game_state = "paused"
+                        else:
+                            game_state = "playing"
+
+            if event.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
+                if game_state == "playing" and charging:
+                    pos = pygame.mouse.get_pos()
+                    if controls_hud.btn_fire.collidepoint(pos) or fire_held:
+                        shot_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
+                        arrows.append(LaserArrow(125, ship_y, shot_speed))
+                        play_sound(SOUND_SHOOT)
+                        power = 0.0
+                        charging = False
+                        fire_held = False
+
+            if event.type == pygame.MOUSEMOTION and game_state == "playing":
+                pos = pygame.mouse.get_pos()
+                if controls_hud.btn_up.collidepoint(pos):
+                    move_up = True
+                elif controls_hud.btn_down.collidepoint(pos):
+                    move_down = True
 
         space_bg.update()
 
-        if not game_over:
-            spawn_timer += dt
-
-            target_level = (score // 100) + 1
-            if target_level > level:
-                level = target_level
-                level_up_display = 90
-
-            if charging:
-                power += 0.8
-
-            # Keyboard Movement
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_w] or keys[pygame.K_UP]: ship_y -= 8
-            if keys[pygame.K_s] or keys[pygame.K_DOWN]: ship_y += 8
-
-            # Touch Movement
-            if pygame.mouse.get_pressed()[0]:
-                mpos = pygame.mouse.get_pos()
-                if controls_hud.btn_up.collidepoint(mpos): ship_y -= 8
-                if controls_hud.btn_down.collidepoint(mpos): ship_y += 8
-
+        if game_state == "playing":
+            ship_speed = 480.0
+            move_delta = 0.0
+            if move_up:
+                move_delta -= 1
+            if move_down:
+                move_delta += 1
+            ship_y += move_delta * ship_speed * dt / 1000.0
             ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
 
-            spawn_interval = max(450, 1600 - (level * 220))
+            if charging:
+                power += 0.75
+                if power > 20.0:
+                    power = 20.0
+
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_w] or keys[pygame.K_UP]:
+                ship_y -= 480 * dt / 1000.0
+            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                ship_y += 480 * dt / 1000.0
+            ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
+
+            if keys[pygame.K_SPACE]:
+                fire_repeat += dt
+                if fire_repeat >= 150:
+                    shot_speed = 24.0 if double_timer <= 0 else 30.0
+                    arrows.append(LaserArrow(125, ship_y, shot_speed, double_shot=double_timer > 0))
+                    play_sound(SOUND_SHOOT)
+                    fire_repeat = 0.0
+
+            spawn_interval = max(500, 1700 - level * 180)
+            spawn_timer += dt
             if spawn_timer >= spawn_interval:
                 targets.append(AlienTarget(level))
-                spawn_timer = 0
+                spawn_timer = 0.0
+
+            level = max(1, int(score / 250) + 1)
+            if score > 0 and score % 250 == 0:
+                level_up_display = 90
+
+            if level_up_display > 0:
+                level_up_display -= dt
+
+            if invincible_timer > 0:
+                invincible_timer -= dt
+            if shield_timer > 0:
+                shield_timer -= dt
+            if double_timer > 0:
+                double_timer -= dt
 
             for a in arrows[:]:
                 a.update()
-                if not a.alive: arrows.remove(a)
+                if not a.alive:
+                    arrows.remove(a)
 
             for t in targets[:]:
                 t.update()
-                if not t.alive:
+                if t.x < -80:
                     targets.remove(t)
-                    play_sound(SOUND_MISS)
-                    lives -= 1
-                    if lives <= 0: 
-                        game_over = True
-                        charging = False
+                    if random.random() < 0.18:
+                        powerups.append(PowerUp(t.x, t.y, random.choice(["double", "shield", "+life"])))
+                    continue
 
             for p in particles[:]:
                 p.update()
-                if p.age >= p.life: particles.remove(p)
+                if p.age >= p.life:
+                    particles.remove(p)
+
+            for p in powerups[:]:
+                p.update()
+                ship_rect = pygame.Rect(80, int(ship_y) - 20, 45, 45)
+                if p.get_rect().colliderect(ship_rect):
+                    if p.kind == "double":
+                        double_timer = 8000
+                    elif p.kind == "shield":
+                        shield_timer = 8000
+                    elif p.kind == "+life":
+                        lives = min(9, lives + 1)
+                    p.alive = False
+                    particles.extend([GlowParticle(p.x, p.y, (255, 255, 255)) for _ in range(20)])
+                if not p.alive:
+                    powerups.remove(p)
+
+            for t in targets[:]:
+                ship_rect = pygame.Rect(80, int(ship_y) - 20, 45, 45)
+                if t.get_rect().colliderect(ship_rect):
+                    if shield_timer <= 0:
+                        if invincible_timer <= 0:
+                            lives -= 1
+                            invincible_timer = 1000.0
+                            shake_timer = 18
+                            play_sound(SOUND_HIT)
+                            for _ in range(40):
+                                particles.append(GlowParticle(t.x, t.y, t.color))
+                            if lives <= 0:
+                                high_score = max(high_score, score)
+                                save_high_score(high_score)
+                                game_state = "game_over"
+                                charging = False
+                                fire_held = False
+                                continue
+                    if t in targets:
+                        targets.remove(t)
+                    if random.random() < 0.25:
+                        powerups.append(PowerUp(t.x, t.y, random.choice(["double", "shield", "+life"])))
 
             for a in arrows[:]:
                 a_rect = a.get_rect()
                 for t in targets[:]:
                     if a_rect.colliderect(t.get_rect()):
                         score += t.score_val
-                        shake_timer = 7
+                        if score > high_score:
+                            high_score = score
+                            save_high_score(high_score)
                         play_sound(SOUND_HIT)
-                        
-                        for _ in range(30):
+                        shake_timer = 7
+                        for _ in range(26):
                             particles.append(GlowParticle(t.x, t.y, t.color))
-
-                        if a in arrows: arrows.remove(a)
-                        if t in targets: targets.remove(t)
+                        if random.random() < 0.22:
+                            powerups.append(PowerUp(t.x, t.y, random.choice(["double", "shield", "+life"])))
+                        if a in arrows:
+                            arrows.remove(a)
+                        if t in targets:
+                            targets.remove(t)
                         break
 
-        space_bg.draw(screen)
+            if not charging and fire_held:
+                charging = True
 
-        if not game_over:
-            # Player Spacecraft Engine Effect
-            for _ in range(3):
-                tx = 80 - random.randint(10, 22)
-                ty = ship_y + random.randint(-5, 5)
-                pygame.gfxdraw.filled_circle(screen, tx, ty, random.randint(3, 7), (0, 220, 255))
+        if game_state == "menu":
+            draw_menu(screen, title_alpha)
+        else:
+            space_bg.draw(screen)
+            if game_state == "playing":
+                for _ in range(3):
+                    tx = 85 - random.randint(10, 22)
+                    ty = ship_y + random.randint(-6, 6)
+                    pygame.gfxdraw.filled_circle(screen, tx, ty, random.randint(3, 7), (0, 220, 255))
+                draw_ship(screen, ship_y, invincible_timer)
+                if shield_timer > 0:
+                    shield_radius = 35
+                    pygame.gfxdraw.aacircle(screen, 100, int(ship_y), shield_radius, (120, 220, 255, 200))
+            for t in targets:
+                t.draw(screen)
+            for p in powerups:
+                p.draw(screen)
+            for a in arrows:
+                a.draw(screen)
+            for p in particles:
+                p.draw(screen)
+            if game_state == "playing":
+                controls_hud.draw(screen, charging, False)
+            elif game_state == "paused":
+                controls_hud.draw(screen, False, True)
+                pause_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.rect(pause_overlay, (10, 15, 25, 160), (SCREEN_WIDTH // 2 - 180, SCREEN_HEIGHT // 2 - 110, 360, 220), border_radius=24)
+                pause_title = BIG_FONT.render("PAUSED", True, (255, 255, 255))
+                pause_overlay.blit(pause_title, (SCREEN_WIDTH // 2 - pause_title.get_width() // 2, SCREEN_HEIGHT // 2 - 55))
+                pause_hint = FONT.render("PRESS P OR TAP PAUSE TO RESUME", True, (180, 220, 255))
+                pause_overlay.blit(pause_hint, (SCREEN_WIDTH // 2 - pause_hint.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
+                screen.blit(pause_overlay, (0, 0))
+            else:
+                controls_hud.draw(screen, False, False)
 
-            # Draw Ship
-            ship_pts = [(125, int(ship_y)), (75, int(ship_y) - 22), (85, int(ship_y)), (75, int(ship_y) + 22)]
-            pygame.draw.polygon(screen, (0, 220, 255), ship_pts)
-            pygame.draw.polygon(screen, (255, 255, 255), ship_pts, 2)
-            pygame.gfxdraw.filled_ellipse(screen, 95, int(ship_y), 12, 6, (255, 255, 255))
+            if game_state == "playing" and level_up_display > 0:
+                level_burst = LEVEL_FONT.render(f"LEVEL {level}", True, (0, 255, 180))
+                screen.blit(level_burst, (SCREEN_WIDTH // 2 - level_burst.get_width() // 2, 130))
 
-            # Charge Indicator
-            if charging:
-                fill = int((min(power, 20.0) / 20.0) * 120)
-                pygame.draw.rect(screen, (40, 40, 40), (60, ship_y - 45, 120, 8), border_radius=4)
-                pygame.draw.rect(screen, (0, 255, 180), (60, ship_y - 45, fill, 8), border_radius=4)
+            draw_hud(screen, score, lives, level, high_score, game_state, shield_timer, double_timer, power, ship_y)
 
-        for t in targets: t.draw(screen)
-        for a in arrows: a.draw(screen)
-        for p in particles: p.draw(screen)
+            if game_state == "game_over":
+                panel = pygame.Surface((600, 360), pygame.SRCALPHA)
+                pygame.draw.rect(panel, (12, 20, 35, 200), (0, 0, 600, 360), border_radius=22)
+                pygame.draw.rect(panel, (90, 150, 255, 220), (18, 18, 564, 324), border_radius=18, width=3)
+                title = BIG_FONT.render("GAME OVER", True, (255, 120, 120))
+                panel.blit(title, (150, 40))
+                final = HUD_FONT.render(f"FINAL SCORE: {score}", True, (255, 255, 255))
+                best = HUD_FONT.render(f"BEST SCORE: {high_score}", True, (125, 214, 255))
+                panel.blit(final, (190, 140))
+                panel.blit(best, (210, 180))
+                button_rect = pygame.Rect(180, 230, 240, 68)
+                pygame.draw.rect(panel, (0, 190, 240), button_rect, border_radius=18)
+                button_text = HUD_FONT.render("PLAY AGAIN", True, (255, 255, 255))
+                panel.blit(button_text, (button_rect.x + 45, button_rect.y + 18))
+                screen.blit(panel, (SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT // 2 - 180))
 
-        if not game_over:
-            controls_hud.draw(screen, charging)
-
-        hud_txt = FONT.render(f"SCORE: {score}  |  LIVES: {lives}  |  LEVEL: {level}", True, (255, 255, 255))
-        screen.blit(hud_txt, (20, 20))
-
-        if level_up_display > 0 and not game_over:
-            level_up_display -= 1
-            lvl_lbl = LEVEL_FONT.render(f"LEVEL {level} UP!", True, (0, 255, 180))
-            screen.blit(lvl_lbl, (SCREEN_WIDTH // 2 - lvl_lbl.get_width() // 2, 130))
-
-        if game_over:
-            go_txt = BIG_FONT.render("GAME OVER", True, (255, 60, 60))
-            screen.blit(go_txt, (SCREEN_WIDTH // 2 - go_txt.get_width() // 2, SCREEN_HEIGHT // 2 - 90))
-
-            btn_w, btn_h = 280, 60
-            restart_btn = pygame.Rect(SCREEN_WIDTH // 2 - btn_w // 2, SCREEN_HEIGHT // 2, btn_w, btn_h)
-            pygame.draw.rect(screen, (0, 190, 240), restart_btn, border_radius=14)
-            pygame.draw.rect(screen, (255, 255, 255), restart_btn, 3, border_radius=14)
-
-            btn_text = FONT.render("TAP TO RESTART", True, (255, 255, 255))
-            screen.blit(btn_text, (restart_btn.centerx - btn_text.get_width() // 2, restart_btn.centery - btn_text.get_height() // 2))
-
-            r_txt = FONT.render("( or Press 'R' Key )", True, (170, 170, 170))
-            screen.blit(r_txt, (SCREEN_WIDTH // 2 - r_txt.get_width() // 2, SCREEN_HEIGHT // 2 + 75))
-
-        render_offset = [0, 0]
         if shake_timer > 0:
             shake_timer -= 1
-            render_offset[0] = random.randint(-5, 5)
-            render_offset[1] = random.randint(-5, 5)
+            render_offset = [random.randint(-6, 6), random.randint(-6, 6)]
+        else:
+            render_offset = [0, 0]
 
         window.blit(screen, render_offset)
         pygame.display.flip()
         await asyncio.sleep(0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
