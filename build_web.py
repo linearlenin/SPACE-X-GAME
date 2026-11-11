@@ -194,9 +194,8 @@ CUSTOM_SCRIPT = """
         let resizeTimer = 0;
 
         function resizeCanvas() {
-            const viewport = window.visualViewport;
-            const width = Math.max(1, viewport ? viewport.width : window.innerWidth);
-            const height = Math.max(1, viewport ? viewport.height : window.innerHeight);
+            const width = Math.max(1, window.innerWidth);
+            const height = Math.max(1, window.innerHeight);
             const landscape = window.innerWidth > window.innerHeight &&
                 window.matchMedia('(orientation: landscape)').matches;
             const canvas = document.getElementById('canvas');
@@ -228,13 +227,6 @@ CUSTOM_SCRIPT = """
             window.screen.orientation.addEventListener('change', scheduleResize);
         }
         resizeCanvas();
-        setInterval(function () {
-            const landscape = window.innerWidth > window.innerHeight &&
-                window.matchMedia('(orientation: landscape)').matches;
-            if (window.spaceXPortrait === landscape) {
-                resizeCanvas();
-            }
-        }, 250);
 
         document.addEventListener('keydown', function (event) {
             if (event.code === 'Space' || event.key === ' ') {
