@@ -51,25 +51,6 @@ CUSTOM_CSS = """
         display: none !important;
     }
 
-    #rotate-warning {
-        position: fixed;
-        inset: 0;
-        display: none;
-        justify-content: center;
-        align-items: center;
-        padding: 24px;
-        color: #dfeeff;
-        font-size: clamp(14px, 3.8vw, 22px);
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        text-align: center;
-        background: #000;
-        text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
-        z-index: 9999;
-        pointer-events: auto;
-    }
-
     body.space-x-mobile-portrait {
         background: #000 !important;
     }
@@ -84,10 +65,6 @@ CUSTOM_CSS = """
     body.space-x-mobile-portrait #html,
     body.space-x-mobile-portrait #crt {
         display: none !important;
-    }
-
-    body.space-x-mobile-portrait #rotate-warning {
-        display: flex !important;
     }
 
     #game-loading-shell {
@@ -205,7 +182,6 @@ CUSTOM_BODY = """
             <div class="loading-hint">Tap to start · Landscape mode</div>
         </div>
     </div>
-    <div id="rotate-warning">Rotate your device to landscape</div>
 """
 
 CUSTOM_SCRIPT = """
@@ -213,7 +189,6 @@ CUSTOM_SCRIPT = """
 <script>
     (function () {
         const loader = document.getElementById('game-loading-shell');
-        const rotateWarning = document.getElementById('rotate-warning');
         const mobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
             (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
         let resizeTimer = 0;
@@ -233,9 +208,6 @@ CUSTOM_SCRIPT = """
 
             window.spaceXPortrait = mobilePortrait;
             document.body.classList.toggle('space-x-mobile-portrait', mobilePortrait);
-            if (rotateWarning) {
-                rotateWarning.style.display = mobilePortrait ? 'flex' : 'none';
-            }
         }
 
         function resizeCanvas() {
@@ -373,6 +345,12 @@ def patch_generated_html(index_path: Path):
 
     if 'id="game-loading-shell"' not in html:
         html = html.replace("<body>", "<body>" + CUSTOM_BODY, 1)
+    html = re.sub(
+        r'\s*<div id="rotate-warning">.*?</div>',
+        "",
+        html,
+        flags=re.DOTALL,
+    )
 
     script_start = html.find("<!-- SPACE_X_CUSTOM_SCRIPT_START -->")
     script_end = html.find("<!-- SPACE_X_CUSTOM_SCRIPT_END -->")

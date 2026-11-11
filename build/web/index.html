@@ -312,25 +312,6 @@ function show_infobox() {
         display: none !important;
     }
 
-    #rotate-warning {
-        position: fixed;
-        inset: 0;
-        display: none;
-        justify-content: center;
-        align-items: center;
-        padding: 24px;
-        color: #dfeeff;
-        font-size: clamp(14px, 3.8vw, 22px);
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        text-align: center;
-        background: #000;
-        text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
-        z-index: 9999;
-        pointer-events: auto;
-    }
-
     body.space-x-mobile-portrait {
         background: #000 !important;
     }
@@ -345,10 +326,6 @@ function show_infobox() {
     body.space-x-mobile-portrait #html,
     body.space-x-mobile-portrait #crt {
         display: none !important;
-    }
-
-    body.space-x-mobile-portrait #rotate-warning {
-        display: flex !important;
     }
 
     #game-loading-shell {
@@ -467,7 +444,6 @@ function show_infobox() {
             <div class="loading-hint">Tap to start · Landscape mode</div>
         </div>
     </div>
-    <div id="rotate-warning">Rotate your device to landscape</div>
 
 
     <div id="transfer" align=center>
@@ -619,7 +595,6 @@ frameborder="1"
 <script>
     (function () {
         const loader = document.getElementById('game-loading-shell');
-        const rotateWarning = document.getElementById('rotate-warning');
         const mobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
             (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
         let resizeTimer = 0;
@@ -639,9 +614,6 @@ frameborder="1"
 
             window.spaceXPortrait = mobilePortrait;
             document.body.classList.toggle('space-x-mobile-portrait', mobilePortrait);
-            if (rotateWarning) {
-                rotateWarning.style.display = mobilePortrait ? 'flex' : 'none';
-            }
         }
 
         function resizeCanvas() {
