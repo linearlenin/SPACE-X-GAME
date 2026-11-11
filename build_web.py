@@ -189,9 +189,11 @@ CUSTOM_SCRIPT = """
 <script>
     (function () {
         const loader = document.getElementById('game-loading-shell');
+        const loadingHint = loader ? loader.querySelector('.loading-hint') : null;
         const mobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
             (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
         let resizeTimer = 0;
+        window.spaceXGameReady = false;
 
         function viewportSize() {
             const viewport = window.visualViewport;
@@ -290,15 +292,15 @@ CUSTOM_SCRIPT = """
             }, 500);
         };
         const checkGameReady = setInterval(function () {
-            const canvas = document.getElementById('canvas');
-            if (canvas && canvas.width > 1 && canvas.height > 1) {
+            if (window.spaceXGameReady) {
                 clearInterval(checkGameReady);
                 hideLoader();
             }
         }, 250);
         setTimeout(function () {
-            clearInterval(checkGameReady);
-            hideLoader();
+            if (!window.spaceXGameReady && loadingHint) {
+                loadingHint.textContent = 'Still loading · check your connection and keep this page open';
+            }
         }, 30000);
     })();
 </script>

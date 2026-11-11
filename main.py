@@ -854,6 +854,10 @@ async def main():
 
         window.blit(screen, render_offset)
         pygame.display.flip()
+        if browser_platform is not None and not getattr(
+            browser_platform.window, "spaceXGameReady", False
+        ):
+            browser_platform.window.spaceXGameReady = True
         await asyncio.sleep(0)
 
 
