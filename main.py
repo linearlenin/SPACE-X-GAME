@@ -553,11 +553,13 @@ async def main():
     while True:
         dt = clock.tick(FPS)
         title_alpha += dt
+        old_screen_height = SCREEN_HEIGHT
         if browser_platform is not None and resize_game_viewport():
+            height_scale = SCREEN_HEIGHT / old_screen_height
             space_bg = ParallaxSpace()
-            ship_y = clamp_ship_y(ship_y)
+            ship_y = clamp_ship_y(ship_y * height_scale)
             for entity in targets + powerups + arrows + particles:
-                entity.y = max(0, min(SCREEN_HEIGHT, entity.y))
+                entity.y = max(0, min(SCREEN_HEIGHT, entity.y * height_scale))
         controls_hud.update_viewport()
 
         for event in pygame.event.get():
