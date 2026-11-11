@@ -24,6 +24,16 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 
+
+def browser_viewport_size():
+    if browser_platform is None:
+        return SCREEN_WIDTH, SCREEN_HEIGHT
+    width = getattr(browser_platform.window, "spaceXViewportWidth", SCREEN_WIDTH)
+    height = getattr(browser_platform.window, "spaceXViewportHeight", SCREEN_HEIGHT)
+    return max(320, int(width)), max(240, int(height))
+
+
+SCREEN_WIDTH, SCREEN_HEIGHT = browser_viewport_size()
 window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED | pygame.RESIZABLE)
 pygame.display.set_caption("SPACE X")
 screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -31,18 +41,34 @@ clock = pygame.time.Clock()
 
 
 def visible_vertical_bounds():
-    if browser_platform is None:
-        return 0.0, float(SCREEN_HEIGHT)
-    top = float(getattr(browser_platform.window, "spaceXVisibleTop", 0.0))
-    bottom = float(getattr(browser_platform.window, "spaceXVisibleBottom", SCREEN_HEIGHT))
-    return max(0.0, top), min(float(SCREEN_HEIGHT), bottom)
+    return 0.0, float(SCREEN_HEIGHT)
 
 
-FONT = pygame.font.SysFont("Consolas", 22, bold=True)
-BIG_FONT = pygame.font.SysFont("Impact", 64)
-LEVEL_FONT = pygame.font.SysFont("Impact", 80)
-HUD_FONT = pygame.font.SysFont("Verdana", 30, bold=True)
-TITLE_FONT = pygame.font.SysFont("Impact", 120)
+def game_fonts():
+    scale = min(1.0, max(0.55, SCREEN_WIDTH / 1000))
+    return (
+        pygame.font.SysFont("Consolas", max(14, int(22 * scale)), bold=True),
+        pygame.font.SysFont("Impact", max(40, int(64 * scale))),
+        pygame.font.SysFont("Impact", max(46, int(80 * scale))),
+        pygame.font.SysFont("Verdana", max(18, int(30 * scale)), bold=True),
+        pygame.font.SysFont("Impact", max(58, int(120 * scale))),
+    )
+
+
+FONT, BIG_FONT, LEVEL_FONT, HUD_FONT, TITLE_FONT = game_fonts()
+
+
+def resize_game_viewport():
+    global SCREEN_WIDTH, SCREEN_HEIGHT, screen, window
+    global FONT, BIG_FONT, LEVEL_FONT, HUD_FONT, TITLE_FONT
+    width, height = browser_viewport_size()
+    if (width, height) == (SCREEN_WIDTH, SCREEN_HEIGHT):
+        return False
+    SCREEN_WIDTH, SCREEN_HEIGHT = width, height
+    window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED | pygame.RESIZABLE)
+    screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    FONT, BIG_FONT, LEVEL_FONT, HUD_FONT, TITLE_FONT = game_fonts()
+    return True
 
 SAVE_PATH = Path(__file__).with_name("space_x_game_save.json")
 
@@ -306,6 +332,10 @@ class ControlsHUD:
 
     def update_viewport(self):
         top, bottom = visible_vertical_bounds()
+        self.btn_up.x = 44
+        self.btn_down.x = 44
+        self.btn_fire.x = SCREEN_WIDTH - 156
+        self.btn_pause.x = SCREEN_WIDTH - 90
         self.btn_up.y = int(bottom - 226)
         self.btn_down.y = int(bottom - 120)
         self.btn_fire.y = int(bottom - 160)
@@ -377,7 +407,7 @@ def draw_hud(surface, score, lives, level, high_score, state, shield_timer, doub
     level_text = HUD_FONT.render(f"LEVEL {level}", True, (0, 255, 180))
 
     surface.blit(score_text, (20, int(visible_top + 18)))
-    surface.blit(high_score_text, (SCREEN_WIDTH - 200, int(visible_top + 18)))
+    surface.blit(high_score_text, (SCREEN_WIDTH - high_score_text.get_width() - 20, int(visible_top + 18)))
     surface.blit(lives_text, (20, int(visible_top + 50)))
     surface.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2, int(visible_top + 18)))
 
@@ -402,19 +432,21 @@ def draw_menu(surface, title_alpha):
     subtitle = HUD_FONT.render("PRESS SPACE OR TAP TO START", True, (255, 255, 255))
     surface.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, SCREEN_HEIGHT // 2 + 40))
 
-    bar_bg = pygame.Rect(SCREEN_WIDTH // 2 - 220, SCREEN_HEIGHT // 2 + 100, 440, 18)
+    bar_width = min(440, SCREEN_WIDTH - 48)
+    bar_bg = pygame.Rect(SCREEN_WIDTH // 2 - bar_width // 2, SCREEN_HEIGHT // 2 + 100, bar_width, 18)
     pygame.draw.rect(surface, (35, 35, 40), bar_bg, border_radius=9)
     progress = min(1.0, (title_alpha % 180) / 180.0)
     pygame.draw.rect(surface, (0, 255, 170), (bar_bg.x, bar_bg.y, int(bar_bg.width * progress), bar_bg.height), border_radius=9)
 
 
 async def main():
+    global FONT, BIG_FONT, LEVEL_FONT, HUD_FONT, TITLE_FONT
+    resize_game_viewport()
     space_bg = ParallaxSpace()
     controls_hud = ControlsHUD()
     high_score = load_high_score()
     game_state = "menu"
     title_alpha = 0
-    orientation_paused = False
 
     ship_y = SCREEN_HEIGHT // 2
     lives = 5
@@ -521,36 +553,17 @@ async def main():
     while True:
         dt = clock.tick(FPS)
         title_alpha += dt
+        if browser_platform is not None and resize_game_viewport():
+            space_bg = ParallaxSpace()
+            ship_y = clamp_ship_y(ship_y)
+            for entity in targets + powerups + arrows + particles:
+                entity.y = max(0, min(SCREEN_HEIGHT, entity.y))
         controls_hud.update_viewport()
-
-        if browser_platform is not None:
-            portrait_mode = bool(getattr(browser_platform.window, "spaceXPortrait", False))
-            if portrait_mode and game_state == "playing":
-                game_state = "paused"
-                orientation_paused = True
-                move_up = False
-                move_down = False
-                fire_held = False
-                charging = False
-                fire_pointer = None
-                mouse_drag = False
-                mouse_move_direction = 0
-                active_touches.clear()
-                drag_touches.clear()
-                touch_directions.clear()
-            elif not portrait_mode and orientation_paused:
-                if game_state == "paused":
-                    game_state = "playing"
-                orientation_paused = False
-                ship_y = clamp_ship_y(ship_y)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-
-            if browser_platform is not None and getattr(browser_platform.window, "spaceXPortrait", False):
-                continue
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -844,7 +857,13 @@ async def main():
                 pygame.draw.rect(panel, (0, 190, 240), button_rect, border_radius=18)
                 button_text = HUD_FONT.render("PLAY AGAIN", True, (255, 255, 255))
                 panel.blit(button_text, (button_rect.x + 45, button_rect.y + 18))
-                screen.blit(panel, (SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT // 2 - 180))
+                panel_scale = min(1.0, (SCREEN_WIDTH - 24) / 600, (SCREEN_HEIGHT - 24) / 360)
+                panel_size = (int(600 * panel_scale), int(360 * panel_scale))
+                panel = pygame.transform.smoothscale(panel, panel_size)
+                screen.blit(
+                    panel,
+                    (SCREEN_WIDTH // 2 - panel_size[0] // 2, SCREEN_HEIGHT // 2 - panel_size[1] // 2),
+                )
 
         if shake_timer > 0:
             shake_timer -= 1
@@ -854,10 +873,6 @@ async def main():
 
         window.blit(screen, render_offset)
         pygame.display.flip()
-        if browser_platform is not None and not getattr(
-            browser_platform.window, "spaceXGameReady", False
-        ):
-            browser_platform.window.spaceXGameReady = True
         await asyncio.sleep(0)
 
 

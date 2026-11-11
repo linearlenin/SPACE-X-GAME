@@ -51,22 +51,6 @@ CUSTOM_CSS = """
         display: none !important;
     }
 
-    body.space-x-mobile-portrait {
-        background: #000 !important;
-    }
-
-    body.space-x-mobile-portrait #game-loading-shell,
-    body.space-x-mobile-portrait #transfer,
-    body.space-x-mobile-portrait #status,
-    body.space-x-mobile-portrait #progress,
-    body.space-x-mobile-portrait #canvas,
-    body.space-x-mobile-portrait #canvas3d,
-    body.space-x-mobile-portrait #infobox,
-    body.space-x-mobile-portrait #html,
-    body.space-x-mobile-portrait #crt {
-        display: none !important;
-    }
-
     #game-loading-shell {
         position: fixed;
         inset: 0;
@@ -74,13 +58,9 @@ CUSTOM_CSS = """
         align-items: center;
         justify-content: center;
         background: radial-gradient(circle at center, rgba(16, 44, 80, 0.9), rgba(1, 4, 14, 0.98));
-        z-index: 9998;
+        z-index: 4;
         pointer-events: none;
         transition: opacity 0.5s ease;
-    }
-
-    #game-loading-shell.hidden {
-        opacity: 0;
     }
 
     .logo-box {
@@ -154,12 +134,12 @@ CUSTOM_CSS = """
     canvas.emscripten {
         border: 0px none;
         background: transparent;
-        width: max(100vw, 177.7778dvh) !important;
-        height: max(100dvh, 56.25vw) !important;
+        width: 100vw !important;
+        height: 100dvh !important;
         max-width: none !important;
         max-height: none !important;
-        aspect-ratio: 16 / 9;
-        object-fit: contain !important;
+        aspect-ratio: auto;
+        object-fit: fill !important;
         z-index: 5;
         padding: 0;
         margin: 0;
@@ -179,7 +159,7 @@ CUSTOM_BODY = """
         <div class="logo-box">
             <div class="space-x-logo">SPACE X</div>
             <div class="loading-bar"><span class="loading-fill"></span></div>
-            <div class="loading-hint">Tap to start · Landscape mode</div>
+            <div class="loading-hint">Tap to start · Any orientation</div>
         </div>
     </div>
 """
@@ -189,11 +169,7 @@ CUSTOM_SCRIPT = """
 <script>
     (function () {
         const loader = document.getElementById('game-loading-shell');
-        const loadingHint = loader ? loader.querySelector('.loading-hint') : null;
-        const mobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
-            (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
         let resizeTimer = 0;
-        window.spaceXGameReady = false;
 
         function viewportSize() {
             const viewport = window.visualViewport;
@@ -203,36 +179,23 @@ CUSTOM_SCRIPT = """
             };
         }
 
-        function updateOrientationState() {
-            const { width, height } = viewportSize();
-            const landscape = width > height;
-            const mobilePortrait = mobileDevice && !landscape;
-
-            window.spaceXPortrait = mobilePortrait;
-            document.body.classList.toggle('space-x-mobile-portrait', mobilePortrait);
-        }
-
         function resizeCanvas() {
             const { width, height } = viewportSize();
-            updateOrientationState();
+            window.spaceXViewportWidth = Math.max(320, Math.round(width));
+            window.spaceXViewportHeight = Math.max(240, Math.round(height));
             const canvas = document.getElementById('canvas');
             if (canvas) {
-                const scale = Math.max(width / 1280, height / 720);
-                const visibleHeight = Math.min(720, height / scale);
-                window.spaceXVisibleTop = (720 - visibleHeight) / 2;
-                window.spaceXVisibleBottom = window.spaceXVisibleTop + visibleHeight;
-                canvas.style.setProperty('width', Math.round(1280 * scale) + 'px', 'important');
-                canvas.style.setProperty('height', Math.round(720 * scale) + 'px', 'important');
-                canvas.style.setProperty('left', '50%', 'important');
-                canvas.style.setProperty('top', '50%', 'important');
+                canvas.style.setProperty('width', '100vw', 'important');
+                canvas.style.setProperty('height', '100dvh', 'important');
+                canvas.style.setProperty('left', '0', 'important');
+                canvas.style.setProperty('top', '0', 'important');
                 canvas.style.setProperty('right', 'auto', 'important');
                 canvas.style.setProperty('bottom', 'auto', 'important');
-                canvas.style.setProperty('transform', 'translate(-50%, -50%)', 'important');
+                canvas.style.setProperty('transform', 'none', 'important');
             }
         }
 
         function scheduleResize() {
-            updateOrientationState();
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(resizeCanvas, 150);
         }
@@ -266,9 +229,9 @@ CUSTOM_SCRIPT = """
             if (!canvas || !touch) return false;
             const bounds = canvas.getBoundingClientRect();
             if (!bounds.width || !bounds.height) return false;
-            const x = (touch.clientX - bounds.left) * 1280 / bounds.width;
-            const y = (touch.clientY - bounds.top) * 720 / bounds.height;
-            return x >= 1280 * 0.68 && y >= 720 * 0.62;
+            const x = (touch.clientX - bounds.left) * window.spaceXViewportWidth / bounds.width;
+            const y = (touch.clientY - bounds.top) * window.spaceXViewportHeight / bounds.height;
+            return x >= window.spaceXViewportWidth * 0.68 && y >= window.spaceXViewportHeight * 0.62;
         }
 
         const gameCanvas = document.getElementById('canvas');
@@ -284,24 +247,7 @@ CUSTOM_SCRIPT = """
             gameCanvas.addEventListener('touchend', preventCanvasTouchDefault, { passive: false });
         }
 
-        const hideLoader = function () {
-            if (!loader) return;
-            loader.classList.add('hidden');
-            setTimeout(function () {
-                loader.style.display = 'none';
-            }, 500);
-        };
-        const checkGameReady = setInterval(function () {
-            if (window.spaceXGameReady) {
-                clearInterval(checkGameReady);
-                hideLoader();
-            }
-        }, 250);
-        setTimeout(function () {
-            if (!window.spaceXGameReady && loadingHint) {
-                loadingHint.textContent = 'Still loading · check your connection and keep this page open';
-            }
-        }, 30000);
+        if (loader) loader.setAttribute('aria-hidden', 'true');
     })();
 </script>
 <!-- SPACE_X_CUSTOM_SCRIPT_END -->
@@ -347,13 +293,6 @@ def patch_generated_html(index_path: Path):
 
     if 'id="game-loading-shell"' not in html:
         html = html.replace("<body>", "<body>" + CUSTOM_BODY, 1)
-    html = re.sub(
-        r'\s*<div id="rotate-warning">.*?</div>',
-        "",
-        html,
-        flags=re.DOTALL,
-    )
-
     script_start = html.find("<!-- SPACE_X_CUSTOM_SCRIPT_START -->")
     script_end = html.find("<!-- SPACE_X_CUSTOM_SCRIPT_END -->")
     if script_start >= 0 and script_end >= script_start:
