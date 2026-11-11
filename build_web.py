@@ -205,7 +205,7 @@ CUSTOM_SCRIPT = """
 
         function updateOrientationState() {
             const { width, height } = viewportSize();
-            const landscape = width > height && window.matchMedia('(orientation: landscape)').matches;
+            const landscape = width > height;
             const mobilePortrait = mobileDevice && !landscape;
 
             window.spaceXPortrait = mobilePortrait;
