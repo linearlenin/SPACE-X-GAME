@@ -142,13 +142,13 @@ CUSTOM_CSS = """
         object-fit: fill !important;
         z-index: 5;
         padding: 0;
-        margin: 0;
+        margin: 0 !important;
         position: fixed !important;
-        left: 50% !important;
-        top: 50% !important;
+        left: 0 !important;
+        top: 0 !important;
         right: auto !important;
         bottom: auto !important;
-        transform: translate(-50%, -50%) !important;
+        transform: none !important;
     }
 </style>
 <!-- SPACE_X_CUSTOM_CSS_END -->
