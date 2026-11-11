@@ -181,8 +181,6 @@ function show_infobox() {
     <title>space-x-game</title>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="viewport" content="height=device-height, initial-scale=1.0">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes"/>
 
@@ -290,8 +288,9 @@ function show_infobox() {
 <!-- SPACE_X_CUSTOM_CSS_START -->
 <style>
     html, body {
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
         margin: 0;
         padding: 0;
         background: radial-gradient(circle at top, #07152d 0%, #020814 45%, #000 100%) !important;
@@ -315,13 +314,11 @@ function show_infobox() {
 
     #rotate-warning {
         position: fixed;
-        left: 0;
-        right: 0;
-        bottom: max(16px, env(safe-area-inset-bottom));
+        inset: 0;
         display: none;
         justify-content: center;
         align-items: center;
-        padding: 14px 18px;
+        padding: 24px;
         color: #dfeeff;
         font-size: clamp(14px, 3.8vw, 22px);
         font-weight: 700;
@@ -331,12 +328,7 @@ function show_infobox() {
         background: rgba(3, 10, 24, 0.86);
         text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
         z-index: 9999;
-    }
-
-    @media (orientation: portrait) {
-        #rotate-warning {
-            display: flex;
-        }
+        pointer-events: auto;
     }
 
     #game-loading-shell {
@@ -426,8 +418,8 @@ function show_infobox() {
     canvas.emscripten {
         border: 0px none;
         background: transparent;
-        width: min(100vw, 177.7778vh) !important;
-        height: min(100vh, 56.25vw) !important;
+        width: min(100vw, 177.7778dvh) !important;
+        height: min(100dvh, 56.25vw) !important;
         max-width: 100vw !important;
         max-height: 100vh !important;
         aspect-ratio: 16 / 9;
@@ -444,6 +436,7 @@ function show_infobox() {
     }
 </style>
 <!-- SPACE_X_CUSTOM_CSS_END -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 </head>
 
 <body>
@@ -604,8 +597,64 @@ frameborder="1"
 
 <!-- SPACE_X_CUSTOM_SCRIPT_START -->
 <script>
-    window.addEventListener('load', function () {
+    (function () {
         const loader = document.getElementById('game-loading-shell');
+        const rotateWarning = document.getElementById('rotate-warning');
+        let resizeFrame = 0;
+
+        function resizeCanvas() {
+            const viewport = window.visualViewport;
+            const width = Math.max(1, viewport ? viewport.width : window.innerWidth);
+            const height = Math.max(1, viewport ? viewport.height : window.innerHeight);
+            const portrait = width <= height;
+            const canvas = document.getElementById('canvas');
+
+            window.spaceXPortrait = portrait;
+            if (rotateWarning) {
+                rotateWarning.style.display = portrait ? 'flex' : 'none';
+            }
+            if (canvas) {
+                const scale = Math.min(width / 1280, height / 720);
+                canvas.style.setProperty('width', Math.round(1280 * scale) + 'px', 'important');
+                canvas.style.setProperty('height', Math.round(720 * scale) + 'px', 'important');
+                canvas.style.setProperty('left', (width / 2) + 'px', 'important');
+                canvas.style.setProperty('top', (height / 2) + 'px', 'important');
+            }
+        }
+
+        function scheduleResize() {
+            if (resizeFrame) cancelAnimationFrame(resizeFrame);
+            resizeFrame = requestAnimationFrame(function () {
+                resizeFrame = 0;
+                resizeCanvas();
+            });
+        }
+
+        window.addEventListener('resize', scheduleResize);
+        window.addEventListener('orientationchange', scheduleResize);
+        window.addEventListener('pageshow', scheduleResize);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', scheduleResize);
+        }
+        resizeCanvas();
+
+        function tryLockLandscape() {
+            const orientation = window.screen && window.screen.orientation;
+            if (!orientation || typeof orientation.lock !== 'function') return;
+            try {
+                const result = orientation.lock('landscape');
+                if (result && typeof result.catch === 'function') {
+                    result.catch(function (error) {
+                        console.debug('Landscape orientation lock unavailable:', error);
+                    });
+                }
+            } catch (error) {
+                console.debug('Landscape orientation lock unavailable:', error);
+            }
+        }
+
+        document.addEventListener('pointerdown', tryLockLandscape, { once: true, passive: true });
+
         const hideLoader = function () {
             if (!loader) return;
             loader.classList.add('hidden');
@@ -624,7 +673,7 @@ frameborder="1"
             clearInterval(checkGameReady);
             hideLoader();
         }, 30000);
-    });
+    })();
 </script>
 <!-- SPACE_X_CUSTOM_SCRIPT_END -->
 </body>

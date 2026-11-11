@@ -12,6 +12,10 @@ from pathlib import Path
 import pygame
 import pygame.gfxdraw
 
+browser_platform = None
+if sys.platform == "emscripten":
+    import platform as browser_platform
+
 pygame.init()
 pygame.mixer.init()
 pygame.font.init()
@@ -376,6 +380,7 @@ async def main():
     high_score = load_high_score()
     game_state = "menu"
     title_alpha = 0
+    orientation_paused = False
 
     ship_y = SCREEN_HEIGHT // 2
     lives = 5
@@ -459,6 +464,16 @@ async def main():
     while True:
         dt = clock.tick(FPS)
         title_alpha += dt
+
+        if browser_platform is not None:
+            portrait_mode = bool(getattr(browser_platform.window, "spaceXPortrait", False))
+            if portrait_mode and game_state == "playing":
+                game_state = "paused"
+                orientation_paused = True
+            elif not portrait_mode and orientation_paused:
+                game_state = "playing"
+                orientation_paused = False
+                ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:

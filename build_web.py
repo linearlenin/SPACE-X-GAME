@@ -1,4 +1,5 @@
 ﻿from __future__ import annotations
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -26,8 +27,9 @@ CUSTOM_CSS = """
 <!-- SPACE_X_CUSTOM_CSS_START -->
 <style>
     html, body {
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
         margin: 0;
         padding: 0;
         background: radial-gradient(circle at top, #07152d 0%, #020814 45%, #000 100%) !important;
@@ -51,13 +53,11 @@ CUSTOM_CSS = """
 
     #rotate-warning {
         position: fixed;
-        left: 0;
-        right: 0;
-        bottom: max(16px, env(safe-area-inset-bottom));
+        inset: 0;
         display: none;
         justify-content: center;
         align-items: center;
-        padding: 14px 18px;
+        padding: 24px;
         color: #dfeeff;
         font-size: clamp(14px, 3.8vw, 22px);
         font-weight: 700;
@@ -67,12 +67,7 @@ CUSTOM_CSS = """
         background: rgba(3, 10, 24, 0.86);
         text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
         z-index: 9999;
-    }
-
-    @media (orientation: portrait) {
-        #rotate-warning {
-            display: flex;
-        }
+        pointer-events: auto;
     }
 
     #game-loading-shell {
@@ -162,8 +157,8 @@ CUSTOM_CSS = """
     canvas.emscripten {
         border: 0px none;
         background: transparent;
-        width: min(100vw, 177.7778vh) !important;
-        height: min(100vh, 56.25vw) !important;
+        width: min(100vw, 177.7778dvh) !important;
+        height: min(100dvh, 56.25vw) !important;
         max-width: 100vw !important;
         max-height: 100vh !important;
         aspect-ratio: 16 / 9;
@@ -196,8 +191,64 @@ CUSTOM_BODY = """
 CUSTOM_SCRIPT = """
 <!-- SPACE_X_CUSTOM_SCRIPT_START -->
 <script>
-    window.addEventListener('load', function () {
+    (function () {
         const loader = document.getElementById('game-loading-shell');
+        const rotateWarning = document.getElementById('rotate-warning');
+        let resizeFrame = 0;
+
+        function resizeCanvas() {
+            const viewport = window.visualViewport;
+            const width = Math.max(1, viewport ? viewport.width : window.innerWidth);
+            const height = Math.max(1, viewport ? viewport.height : window.innerHeight);
+            const portrait = width <= height;
+            const canvas = document.getElementById('canvas');
+
+            window.spaceXPortrait = portrait;
+            if (rotateWarning) {
+                rotateWarning.style.display = portrait ? 'flex' : 'none';
+            }
+            if (canvas) {
+                const scale = Math.min(width / 1280, height / 720);
+                canvas.style.setProperty('width', Math.round(1280 * scale) + 'px', 'important');
+                canvas.style.setProperty('height', Math.round(720 * scale) + 'px', 'important');
+                canvas.style.setProperty('left', (width / 2) + 'px', 'important');
+                canvas.style.setProperty('top', (height / 2) + 'px', 'important');
+            }
+        }
+
+        function scheduleResize() {
+            if (resizeFrame) cancelAnimationFrame(resizeFrame);
+            resizeFrame = requestAnimationFrame(function () {
+                resizeFrame = 0;
+                resizeCanvas();
+            });
+        }
+
+        window.addEventListener('resize', scheduleResize);
+        window.addEventListener('orientationchange', scheduleResize);
+        window.addEventListener('pageshow', scheduleResize);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', scheduleResize);
+        }
+        resizeCanvas();
+
+        function tryLockLandscape() {
+            const orientation = window.screen && window.screen.orientation;
+            if (!orientation || typeof orientation.lock !== 'function') return;
+            try {
+                const result = orientation.lock('landscape');
+                if (result && typeof result.catch === 'function') {
+                    result.catch(function (error) {
+                        console.debug('Landscape orientation lock unavailable:', error);
+                    });
+                }
+            } catch (error) {
+                console.debug('Landscape orientation lock unavailable:', error);
+            }
+        }
+
+        document.addEventListener('pointerdown', tryLockLandscape, { once: true, passive: true });
+
         const hideLoader = function () {
             if (!loader) return;
             loader.classList.add('hidden');
@@ -216,7 +267,7 @@ CUSTOM_SCRIPT = """
             clearInterval(checkGameReady);
             hideLoader();
         }, 30000);
-    });
+    })();
 </script>
 <!-- SPACE_X_CUSTOM_SCRIPT_END -->
 """
@@ -235,6 +286,17 @@ def patch_generated_html(index_path: Path):
         'src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"',
         'src="https://cdn.jsdelivr.net/npm/browserfs@2.0.0/dist/browserfs.min.js"',
     )
+    viewport = (
+        '<meta name="viewport" content="width=device-width, initial-scale=1, '
+        'maximum-scale=1, user-scalable=no, viewport-fit=cover">'
+    )
+    html = re.sub(
+        r'(?im)^[ \t]*<meta\s+name=["\']viewport["\'][^>]*>[ \t]*(?:\r?\n|$)',
+        "",
+        html,
+    )
+    html = html.replace("</head>", "    " + viewport + "\n</head>", 1)
+
     css_start = html.find("<!-- SPACE_X_CUSTOM_CSS_START -->")
     css_end = html.find("<!-- SPACE_X_CUSTOM_CSS_END -->")
     if css_start >= 0 and css_end >= css_start:
@@ -256,7 +318,7 @@ def patch_generated_html(index_path: Path):
     if script_start >= 0 and script_end >= script_start:
         script_end += len("<!-- SPACE_X_CUSTOM_SCRIPT_END -->")
         html = html[:script_start] + CUSTOM_SCRIPT.strip() + html[script_end:]
-    elif "window.addEventListener('load', function ()" not in html:
+    elif "function resizeCanvas()" not in html:
         html = html.replace("</body>", CUSTOM_SCRIPT + "</body>", 1)
 
     index_path.write_text(html, encoding="utf-8")
