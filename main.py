@@ -41,7 +41,26 @@ clock = pygame.time.Clock()
 
 
 def visible_vertical_bounds():
-    return 0.0, float(SCREEN_HEIGHT)
+    return 0.0, float(playfield_height())
+
+
+def mobile_controls_enabled():
+    return browser_platform is not None and bool(
+        getattr(browser_platform.window, "spaceXMobileControls", False)
+    )
+
+
+def playfield_height():
+    if mobile_controls_enabled():
+        return max(120, SCREEN_HEIGHT - 110)
+    return SCREEN_HEIGHT
+
+
+def browser_control_pressed(name):
+    if not mobile_controls_enabled():
+        return False
+    controls = getattr(browser_platform.window, "spaceXControls", None)
+    return bool(getattr(controls, name, False))
 
 
 def game_fonts():
@@ -235,10 +254,9 @@ class AlienTarget:
     def __init__(self, level):
         self.x = SCREEN_WIDTH + 60
         visible_top, visible_bottom = visible_vertical_bounds()
-        self.y = random.randint(
-            max(80, int(visible_top + 70)),
-            min(SCREEN_HEIGHT - 120, int(visible_bottom - 70)),
-        )
+        spawn_top = max(30, int(visible_top + 50))
+        spawn_bottom = max(spawn_top, int(visible_bottom - 40))
+        self.y = random.randint(spawn_top, spawn_bottom)
         self.phase = random.random() * math.tau
         self.kind = "standard"
         self.alive = True
@@ -282,6 +300,8 @@ class AlienTarget:
         self.x -= self.speed * frame_scale
         if self.kind in {"zigzag", "boss"}:
             self.y += math.sin((self.x / 30.0) + self.phase) * 1.2 * frame_scale
+        _, bottom = visible_vertical_bounds()
+        self.y = max(self.radius + 8, min(bottom - self.radius - 8, self.y))
         if self.x < -150:
             self.alive = False
 
@@ -332,40 +352,61 @@ class ControlsHUD:
 
     def update_viewport(self):
         top, bottom = visible_vertical_bounds()
-        self.btn_up.x = 44
-        self.btn_down.x = 44
-        self.btn_fire.x = SCREEN_WIDTH - 156
+        if mobile_controls_enabled():
+            bar_top = SCREEN_HEIGHT - 110
+            self.btn_up = pygame.Rect(4, bar_top - 16, 80, 80)
+            self.btn_down = pygame.Rect(4, bar_top + 44, 80, 80)
+            self.btn_fire = pygame.Rect(SCREEN_WIDTH - 88, bar_top + 15, 80, 80)
+        else:
+            self.btn_up = pygame.Rect(44, SCREEN_HEIGHT - 226, 88, 88)
+            self.btn_down = pygame.Rect(44, SCREEN_HEIGHT - 120, 88, 88)
+            self.btn_fire = pygame.Rect(SCREEN_WIDTH - 156, SCREEN_HEIGHT - 160, 120, 120)
         self.btn_pause.x = SCREEN_WIDTH - 90
-        self.btn_up.y = int(bottom - 226)
-        self.btn_down.y = int(bottom - 120)
-        self.btn_fire.y = int(bottom - 160)
         self.btn_pause.y = int(top + 24)
 
     def draw(self, surface, charging, paused):
         self.update_viewport()
         hud_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
-        pygame.gfxdraw.filled_circle(hud_surface, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 40))
-        pygame.gfxdraw.aacircle(hud_surface, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [
+        is_mobile = mobile_controls_enabled()
+        if is_mobile:
+            bar_top = SCREEN_HEIGHT - 110
+            pygame.draw.rect(hud_surface, (8, 11, 24, 255), (0, bar_top, SCREEN_WIDTH, 110))
+            pygame.draw.line(hud_surface, (255, 255, 255, 120), (0, bar_top), (SCREEN_WIDTH, bar_top), 1)
+
+        control_clip = pygame.Rect(0, SCREEN_HEIGHT - 110, SCREEN_WIDTH, 110) if is_mobile else hud_surface.get_rect()
+        hud_surface.set_clip(control_clip)
+        up_pressed = browser_control_pressed("up")
+        down_pressed = browser_control_pressed("down")
+        fire_pressed = browser_control_pressed("fire")
+        button_opacity = 153 if is_mobile else 120
+        up_radius = (25 if up_pressed else 26) if is_mobile else 40
+        down_radius = (25 if down_pressed else 26) if is_mobile else 40
+        fire_radius = (32 if fire_pressed else 34) if is_mobile else 55
+        pygame.gfxdraw.filled_circle(hud_surface, self.btn_up.centerx, self.btn_up.centery, up_radius, (255, 255, 255, 28 if is_mobile else 40))
+        pygame.gfxdraw.aacircle(hud_surface, self.btn_up.centerx, self.btn_up.centery, up_radius, (255, 255, 255, 255 if up_pressed else button_opacity))
+        arrow_alpha = 255 if up_pressed else (153 if is_mobile else 200)
+        pygame.draw.polygon(hud_surface, (255, 255, 255, arrow_alpha), [
             (self.btn_up.centerx, self.btn_up.centery - 21),
-            (self.btn_up.centerx - 26, self.btn_up.centery + 22),
-            (self.btn_up.centerx + 26, self.btn_up.centery + 22),
+            (self.btn_up.centerx - (17 if is_mobile else 26), self.btn_up.centery + (15 if is_mobile else 22)),
+            (self.btn_up.centerx + (17 if is_mobile else 26), self.btn_up.centery + (15 if is_mobile else 22)),
         ])
 
-        pygame.gfxdraw.filled_circle(hud_surface, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 40))
-        pygame.gfxdraw.aacircle(hud_surface, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [
+        pygame.gfxdraw.filled_circle(hud_surface, self.btn_down.centerx, self.btn_down.centery, down_radius, (255, 255, 255, 28 if is_mobile else 40))
+        pygame.gfxdraw.aacircle(hud_surface, self.btn_down.centerx, self.btn_down.centery, down_radius, (255, 255, 255, 255 if down_pressed else button_opacity))
+        arrow_alpha = 255 if down_pressed else (153 if is_mobile else 200)
+        pygame.draw.polygon(hud_surface, (255, 255, 255, arrow_alpha), [
             (self.btn_down.centerx, self.btn_down.centery + 21),
-            (self.btn_down.centerx - 26, self.btn_down.centery - 22),
-            (self.btn_down.centerx + 26, self.btn_down.centery - 22),
+            (self.btn_down.centerx - (17 if is_mobile else 26), self.btn_down.centery - (15 if is_mobile else 22)),
+            (self.btn_down.centerx + (17 if is_mobile else 26), self.btn_down.centery - (15 if is_mobile else 22)),
         ])
 
-        fire_color = (255, 60, 80, 200) if charging else (255, 255, 255, 60)
-        pygame.gfxdraw.filled_circle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, 55, fire_color)
-        pygame.gfxdraw.aacircle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, 55, (255, 80, 80, 240))
+        fire_color = (255, 60, 80, 200) if charging else (255, 255, 255, 153 if is_mobile else 60)
+        pygame.gfxdraw.filled_circle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, fire_radius, fire_color)
+        pygame.gfxdraw.aacircle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, fire_radius, (255, 255, 255, 255 if fire_pressed else button_opacity) if is_mobile else (255, 80, 80, 240))
         fire_label = FONT.render("FIRE", True, (255, 255, 255))
         hud_surface.blit(fire_label, (self.btn_fire.centerx - fire_label.get_width() // 2, self.btn_fire.centery - fire_label.get_height() // 2))
+        hud_surface.set_clip(None)
 
         pygame.draw.rect(hud_surface, (25, 25, 35, 180), self.btn_pause, border_radius=14)
         if paused:
@@ -423,17 +464,21 @@ def draw_hud(surface, score, lives, level, high_score, state, shield_timer, doub
 
 def draw_menu(surface, title_alpha):
     surface.fill((6, 8, 22))
+    menu_height = playfield_height()
     title = TITLE_FONT.render("SPACE X", True, (32, 220, 255))
     title_shadow = TITLE_FONT.render("SPACE X", True, (0, 0, 0))
-    title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 120))
+    title_y = menu_height // 2 - min(120, menu_height // 4)
+    title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, title_y))
     surface.blit(title_shadow, (title_rect.x + 6, title_rect.y + 6))
     surface.blit(title, title_rect)
 
     subtitle = HUD_FONT.render("PRESS SPACE OR TAP TO START", True, (255, 255, 255))
-    surface.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, SCREEN_HEIGHT // 2 + 40))
+    subtitle_y = menu_height // 2 + min(40, menu_height // 8)
+    surface.blit(subtitle, (SCREEN_WIDTH // 2 - subtitle.get_width() // 2, subtitle_y))
 
     bar_width = min(440, SCREEN_WIDTH - 48)
-    bar_bg = pygame.Rect(SCREEN_WIDTH // 2 - bar_width // 2, SCREEN_HEIGHT // 2 + 100, bar_width, 18)
+    bar_y = min(menu_height - 24, menu_height // 2 + min(100, menu_height // 4))
+    bar_bg = pygame.Rect(SCREEN_WIDTH // 2 - bar_width // 2, bar_y, bar_width, 18)
     pygame.draw.rect(surface, (35, 35, 40), bar_bg, border_radius=9)
     progress = min(1.0, (title_alpha % 180) / 180.0)
     pygame.draw.rect(surface, (0, 255, 170), (bar_bg.x, bar_bg.y, int(bar_bg.width * progress), bar_bg.height), border_radius=9)
@@ -467,6 +512,7 @@ async def main():
     move_up = False
     move_down = False
     fire_held = False
+    web_fire_was_held = False
     active_touches = {}
     drag_touches = set()
     touch_directions = {}
@@ -623,6 +669,8 @@ async def main():
                 elif game_state == "game_over":
                     reset_game()
                     game_state = "playing"
+                elif mobile_controls_enabled() and pos[1] >= playfield_height():
+                    pass
                 else:
                     if controls_hud.btn_fire.collidepoint(pos) or is_fire_touch_area(pos):
                         charging = True
@@ -664,6 +712,8 @@ async def main():
                 elif game_state == "game_over":
                     reset_game()
                     game_state = "playing"
+                elif mobile_controls_enabled() and pos[1] >= playfield_height():
+                    pass
                 elif controls_hud.btn_fire.collidepoint(pos):
                     charging = True
                     fire_held = True
@@ -689,13 +739,19 @@ async def main():
                 mouse_move_direction = 0
 
         space_bg.update(dt / (1000.0 / FPS))
+        web_fire_held = browser_control_pressed("fire")
+        if web_fire_held and not web_fire_was_held:
+            charging = True
+        elif not web_fire_held and web_fire_was_held and charging and game_state == "playing":
+            fire_charged_shot()
+        web_fire_was_held = web_fire_held
 
         if game_state == "playing":
             frame_scale = dt / (1000.0 / FPS)
             ship_speed = 480.0
             touch_up = any(direction < 0 for direction in touch_directions.values())
             touch_down = any(direction > 0 for direction in touch_directions.values())
-            move_delta = int(move_down or touch_down or mouse_move_direction > 0) - int(move_up or touch_up or mouse_move_direction < 0)
+            move_delta = int(move_down or touch_down or mouse_move_direction > 0 or browser_control_pressed("down")) - int(move_up or touch_up or mouse_move_direction < 0 or browser_control_pressed("up"))
             ship_y += move_delta * ship_speed * dt / 1000.0
             ship_y = clamp_ship_y(ship_y)
 
@@ -826,18 +882,22 @@ async def main():
             for p in particles:
                 p.draw(screen)
             if game_state == "playing":
-                controls_hud.draw(screen, charging, False)
+                if not mobile_controls_enabled():
+                    controls_hud.draw(screen, charging, False)
             elif game_state == "paused":
-                controls_hud.draw(screen, False, True)
-                pause_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                pygame.draw.rect(pause_overlay, (10, 15, 25, 160), (SCREEN_WIDTH // 2 - 180, SCREEN_HEIGHT // 2 - 110, 360, 220), border_radius=24)
+                if not mobile_controls_enabled():
+                    controls_hud.draw(screen, False, True)
+                field_height = playfield_height()
+                pause_overlay = pygame.Surface((SCREEN_WIDTH, field_height), pygame.SRCALPHA)
+                pygame.draw.rect(pause_overlay, (10, 15, 25, 160), (SCREEN_WIDTH // 2 - 180, field_height // 2 - 110, 360, 220), border_radius=24)
                 pause_title = BIG_FONT.render("PAUSED", True, (255, 255, 255))
-                pause_overlay.blit(pause_title, (SCREEN_WIDTH // 2 - pause_title.get_width() // 2, SCREEN_HEIGHT // 2 - 55))
+                pause_overlay.blit(pause_title, (SCREEN_WIDTH // 2 - pause_title.get_width() // 2, field_height // 2 - 55))
                 pause_hint = FONT.render("PRESS P OR TAP PAUSE TO RESUME", True, (180, 220, 255))
-                pause_overlay.blit(pause_hint, (SCREEN_WIDTH // 2 - pause_hint.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
+                pause_overlay.blit(pause_hint, (SCREEN_WIDTH // 2 - pause_hint.get_width() // 2, field_height // 2 + 20))
                 screen.blit(pause_overlay, (0, 0))
             else:
-                controls_hud.draw(screen, False, False)
+                if not mobile_controls_enabled():
+                    controls_hud.draw(screen, False, False)
 
             if game_state == "playing" and level_up_display > 0:
                 level_burst = LEVEL_FONT.render(f"LEVEL {level}", True, (0, 255, 180))
@@ -859,13 +919,17 @@ async def main():
                 pygame.draw.rect(panel, (0, 190, 240), button_rect, border_radius=18)
                 button_text = HUD_FONT.render("PLAY AGAIN", True, (255, 255, 255))
                 panel.blit(button_text, (button_rect.x + 45, button_rect.y + 18))
-                panel_scale = min(1.0, (SCREEN_WIDTH - 24) / 600, (SCREEN_HEIGHT - 24) / 360)
+                field_height = playfield_height()
+                panel_scale = min(1.0, (SCREEN_WIDTH - 24) / 600, (field_height - 24) / 360)
                 panel_size = (int(600 * panel_scale), int(360 * panel_scale))
                 panel = pygame.transform.smoothscale(panel, panel_size)
                 screen.blit(
                     panel,
-                    (SCREEN_WIDTH // 2 - panel_size[0] // 2, SCREEN_HEIGHT // 2 - panel_size[1] // 2),
+                    (SCREEN_WIDTH // 2 - panel_size[0] // 2, field_height // 2 - panel_size[1] // 2),
                 )
+
+        if mobile_controls_enabled():
+            controls_hud.draw(screen, charging, game_state == "paused")
 
         if shake_timer > 0:
             shake_timer -= 1

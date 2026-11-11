@@ -589,6 +589,8 @@ frameborder="1"
             const { width, height } = viewportSize();
             window.spaceXViewportWidth = Math.max(320, Math.round(width));
             window.spaceXViewportHeight = Math.max(240, Math.round(height));
+            window.spaceXMobileControls = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
+                (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
             const canvas = document.getElementById('canvas');
             if (canvas) {
                 canvas.style.setProperty('width', '100vw', 'important');
@@ -629,28 +631,68 @@ frameborder="1"
             }
         }, { capture: true });
 
-        function isFireButtonTouch(event) {
+        const gameCanvas = document.getElementById('canvas');
+        const pointerControls = new Map();
+        const controlPointers = { up: new Set(), down: new Set(), fire: new Set() };
+        window.spaceXControls = { up: false, down: false, fire: false };
+
+        function controlAt(clientX, clientY) {
+            if (!window.spaceXMobileControls) return null;
             const canvas = document.getElementById('canvas');
-            const touch = event.changedTouches[0] || event.touches[0];
-            if (!canvas || !touch) return false;
+            if (!canvas) return null;
             const bounds = canvas.getBoundingClientRect();
-            if (!bounds.width || !bounds.height) return false;
-            const x = (touch.clientX - bounds.left) * window.spaceXViewportWidth / bounds.width;
-            const y = (touch.clientY - bounds.top) * window.spaceXViewportHeight / bounds.height;
-            return x >= window.spaceXViewportWidth * 0.68 && y >= window.spaceXViewportHeight * 0.62;
+            const x = clientX - bounds.left;
+            const y = clientY - bounds.top;
+            const width = window.spaceXViewportWidth;
+            const barTop = window.spaceXViewportHeight - 110;
+
+            if (x >= 4 && x <= 84 && y >= barTop - 16 && y <= barTop + 124) {
+                const upDistance = Math.abs(y - (barTop + 24));
+                const downDistance = Math.abs(y - (barTop + 84));
+                return upDistance <= downDistance ? 'up' : 'down';
+            }
+            if (x >= width - 88 && x <= width - 8 &&
+                    y >= barTop + 15 && y <= barTop + 95) {
+                return 'fire';
+            }
+            return null;
         }
 
-        const gameCanvas = document.getElementById('canvas');
-        function preventCanvasTouchDefault(event) {
-            event.preventDefault();
-            if (isFireButtonTouch(event)) {
-                event.stopPropagation();
-            }
+        function updateControlState() {
+            Object.keys(controlPointers).forEach(function (name) {
+                window.spaceXControls[name] = controlPointers[name].size > 0;
+            });
+        }
+
+        function releasePointerControl(pointerId) {
+            const name = pointerControls.get(pointerId);
+            if (!name) return;
+            pointerControls.delete(pointerId);
+            controlPointers[name].delete(pointerId);
+            updateControlState();
         }
 
         if (gameCanvas) {
-            gameCanvas.addEventListener('touchstart', preventCanvasTouchDefault, { passive: false });
-            gameCanvas.addEventListener('touchend', preventCanvasTouchDefault, { passive: false });
+            gameCanvas.addEventListener('pointerdown', function (event) {
+                const name = controlAt(event.clientX, event.clientY);
+                if (!name) return;
+                event.preventDefault();
+                pointerControls.set(event.pointerId, name);
+                controlPointers[name].add(event.pointerId);
+                updateControlState();
+                if (event.isTrusted) {
+                    gameCanvas.setPointerCapture(event.pointerId);
+                }
+            });
+            gameCanvas.addEventListener('pointerup', function (event) {
+                releasePointerControl(event.pointerId);
+            });
+            gameCanvas.addEventListener('pointercancel', function (event) {
+                releasePointerControl(event.pointerId);
+            });
+            gameCanvas.addEventListener('lostpointercapture', function (event) {
+                releasePointerControl(event.pointerId);
+            });
         }
 
         if (loader) loader.setAttribute('aria-hidden', 'true');
