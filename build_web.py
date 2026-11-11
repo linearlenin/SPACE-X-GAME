@@ -195,6 +195,7 @@ CUSTOM_SCRIPT = """
         const loader = document.getElementById('game-loading-shell');
         const rotateWarning = document.getElementById('rotate-warning');
         let resizeFrame = 0;
+        let lastViewport = '';
 
         function resizeCanvas() {
             const viewport = window.visualViewport;
@@ -202,12 +203,14 @@ CUSTOM_SCRIPT = """
             const height = Math.max(1, viewport ? viewport.height : window.innerHeight);
             const portrait = width <= height;
             const canvas = document.getElementById('canvas');
+            const viewportKey = Math.round(width) + 'x' + Math.round(height);
 
             window.spaceXPortrait = portrait;
             if (rotateWarning) {
                 rotateWarning.style.display = portrait ? 'flex' : 'none';
             }
-            if (canvas) {
+            if (canvas && viewportKey !== lastViewport) {
+                lastViewport = viewportKey;
                 const scale = Math.min(width / 1280, height / 720);
                 canvas.style.setProperty('width', Math.round(1280 * scale) + 'px', 'important');
                 canvas.style.setProperty('height', Math.round(720 * scale) + 'px', 'important');
@@ -224,12 +227,27 @@ CUSTOM_SCRIPT = """
             });
         }
 
+        function settleOrientation() {
+            scheduleResize();
+            [100, 300, 700].forEach(function (delay) {
+                setTimeout(scheduleResize, delay);
+            });
+        }
+
         window.addEventListener('resize', scheduleResize);
-        window.addEventListener('orientationchange', scheduleResize);
+        window.addEventListener('orientationchange', settleOrientation);
         window.addEventListener('pageshow', scheduleResize);
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', scheduleResize);
         }
+        if (window.screen && window.screen.orientation &&
+                typeof window.screen.orientation.addEventListener === 'function') {
+            window.screen.orientation.addEventListener('change', settleOrientation);
+        }
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(scheduleResize).observe(document.documentElement);
+        }
+        setInterval(scheduleResize, 500);
         resizeCanvas();
 
         function tryLockLandscape() {
