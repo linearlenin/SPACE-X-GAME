@@ -64,10 +64,30 @@ CUSTOM_CSS = """
         letter-spacing: 0.12em;
         text-transform: uppercase;
         text-align: center;
-        background: rgba(3, 10, 24, 0.86);
+        background: #000;
         text-shadow: 0 0 12px rgba(52, 201, 255, 0.9);
         z-index: 9999;
         pointer-events: auto;
+    }
+
+    body.space-x-mobile-portrait {
+        background: #000 !important;
+    }
+
+    body.space-x-mobile-portrait #game-loading-shell,
+    body.space-x-mobile-portrait #transfer,
+    body.space-x-mobile-portrait #status,
+    body.space-x-mobile-portrait #progress,
+    body.space-x-mobile-portrait #canvas,
+    body.space-x-mobile-portrait #canvas3d,
+    body.space-x-mobile-portrait #infobox,
+    body.space-x-mobile-portrait #html,
+    body.space-x-mobile-portrait #crt {
+        display: none !important;
+    }
+
+    body.space-x-mobile-portrait #rotate-warning {
+        display: flex !important;
     }
 
     #game-loading-shell {
@@ -157,18 +177,21 @@ CUSTOM_CSS = """
     canvas.emscripten {
         border: 0px none;
         background: transparent;
-        width: min(100vw, 177.7778dvh) !important;
-        height: min(100dvh, 56.25vw) !important;
-        max-width: 100vw !important;
-        max-height: 100vh !important;
+        width: max(100vw, 177.7778dvh) !important;
+        height: max(100dvh, 56.25vw) !important;
+        max-width: none !important;
+        max-height: none !important;
         aspect-ratio: 16 / 9;
         object-fit: contain !important;
         z-index: 5;
         padding: 0;
-        margin: auto;
+        margin: 0;
         position: fixed !important;
-        inset: 0 !important;
-        transform: none !important;
+        left: 50% !important;
+        top: 50% !important;
+        right: auto !important;
+        bottom: auto !important;
+        transform: translate(-50%, -50%) !important;
     }
 </style>
 <!-- SPACE_X_CUSTOM_CSS_END -->
@@ -191,27 +214,51 @@ CUSTOM_SCRIPT = """
     (function () {
         const loader = document.getElementById('game-loading-shell');
         const rotateWarning = document.getElementById('rotate-warning');
+        const mobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
+            (navigator.maxTouchPoints > 1 && window.matchMedia('(pointer: coarse)').matches);
         let resizeTimer = 0;
 
-        function resizeCanvas() {
-            const width = Math.max(1, window.innerWidth);
-            const height = Math.max(1, window.innerHeight);
-            const landscape = window.innerWidth > window.innerHeight &&
-                window.matchMedia('(orientation: landscape)').matches;
-            const canvas = document.getElementById('canvas');
+        function viewportSize() {
+            const viewport = window.visualViewport;
+            return {
+                width: Math.max(1, viewport ? viewport.width : window.innerWidth),
+                height: Math.max(1, viewport ? viewport.height : window.innerHeight)
+            };
+        }
 
-            window.spaceXPortrait = !landscape;
+        function updateOrientationState() {
+            const { width, height } = viewportSize();
+            const landscape = width > height && window.matchMedia('(orientation: landscape)').matches;
+            const mobilePortrait = mobileDevice && !landscape;
+
+            window.spaceXPortrait = mobilePortrait;
+            document.body.classList.toggle('space-x-mobile-portrait', mobilePortrait);
             if (rotateWarning) {
-                rotateWarning.style.display = landscape ? 'none' : 'flex';
+                rotateWarning.style.display = mobilePortrait ? 'flex' : 'none';
             }
+        }
+
+        function resizeCanvas() {
+            const { width, height } = viewportSize();
+            updateOrientationState();
+            const canvas = document.getElementById('canvas');
             if (canvas) {
-                const scale = Math.min(width / 1280, height / 720);
+                const scale = Math.max(width / 1280, height / 720);
+                const visibleHeight = Math.min(720, height / scale);
+                window.spaceXVisibleTop = (720 - visibleHeight) / 2;
+                window.spaceXVisibleBottom = window.spaceXVisibleTop + visibleHeight;
                 canvas.style.setProperty('width', Math.round(1280 * scale) + 'px', 'important');
                 canvas.style.setProperty('height', Math.round(720 * scale) + 'px', 'important');
+                canvas.style.setProperty('left', '50%', 'important');
+                canvas.style.setProperty('top', '50%', 'important');
+                canvas.style.setProperty('right', 'auto', 'important');
+                canvas.style.setProperty('bottom', 'auto', 'important');
+                canvas.style.setProperty('transform', 'translate(-50%, -50%)', 'important');
             }
         }
 
         function scheduleResize() {
+            updateOrientationState();
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(resizeCanvas, 150);
         }

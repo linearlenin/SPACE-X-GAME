@@ -29,6 +29,15 @@ pygame.display.set_caption("SPACE X")
 screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = pygame.time.Clock()
 
+
+def visible_vertical_bounds():
+    if browser_platform is None:
+        return 0.0, float(SCREEN_HEIGHT)
+    top = float(getattr(browser_platform.window, "spaceXVisibleTop", 0.0))
+    bottom = float(getattr(browser_platform.window, "spaceXVisibleBottom", SCREEN_HEIGHT))
+    return max(0.0, top), min(float(SCREEN_HEIGHT), bottom)
+
+
 FONT = pygame.font.SysFont("Consolas", 22, bold=True)
 BIG_FONT = pygame.font.SysFont("Impact", 64)
 LEVEL_FONT = pygame.font.SysFont("Impact", 80)
@@ -199,7 +208,11 @@ class PowerUp:
 class AlienTarget:
     def __init__(self, level):
         self.x = SCREEN_WIDTH + 60
-        self.y = random.randint(80, SCREEN_HEIGHT - 120)
+        visible_top, visible_bottom = visible_vertical_bounds()
+        self.y = random.randint(
+            max(80, int(visible_top + 70)),
+            min(SCREEN_HEIGHT - 120, int(visible_bottom - 70)),
+        )
         self.phase = random.random() * math.tau
         self.kind = "standard"
         self.alive = True
@@ -291,16 +304,32 @@ class ControlsHUD:
         self.btn_fire = pygame.Rect(SCREEN_WIDTH - 156, SCREEN_HEIGHT - 160, 120, 120)
         self.btn_pause = pygame.Rect(SCREEN_WIDTH - 90, 24, 56, 56)
 
+    def update_viewport(self):
+        top, bottom = visible_vertical_bounds()
+        self.btn_up.y = int(bottom - 226)
+        self.btn_down.y = int(bottom - 120)
+        self.btn_fire.y = int(bottom - 160)
+        self.btn_pause.y = int(top + 24)
+
     def draw(self, surface, charging, paused):
+        self.update_viewport()
         hud_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
         pygame.gfxdraw.filled_circle(hud_surface, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 40))
         pygame.gfxdraw.aacircle(hud_surface, self.btn_up.centerx, self.btn_up.centery, 40, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [(82, SCREEN_HEIGHT - 203), (56, SCREEN_HEIGHT - 160), (108, SCREEN_HEIGHT - 160)])
+        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [
+            (self.btn_up.centerx, self.btn_up.centery - 21),
+            (self.btn_up.centerx - 26, self.btn_up.centery + 22),
+            (self.btn_up.centerx + 26, self.btn_up.centery + 22),
+        ])
 
         pygame.gfxdraw.filled_circle(hud_surface, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 40))
         pygame.gfxdraw.aacircle(hud_surface, self.btn_down.centerx, self.btn_down.centery, 40, (255, 255, 255, 120))
-        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [(82, SCREEN_HEIGHT - 62), (56, SCREEN_HEIGHT - 100), (108, SCREEN_HEIGHT - 100)])
+        pygame.draw.polygon(hud_surface, (255, 255, 255, 200), [
+            (self.btn_down.centerx, self.btn_down.centery + 21),
+            (self.btn_down.centerx - 26, self.btn_down.centery - 22),
+            (self.btn_down.centerx + 26, self.btn_down.centery - 22),
+        ])
 
         fire_color = (255, 60, 80, 200) if charging else (255, 255, 255, 60)
         pygame.gfxdraw.filled_circle(hud_surface, self.btn_fire.centerx, self.btn_fire.centery, 55, fire_color)
@@ -310,10 +339,14 @@ class ControlsHUD:
 
         pygame.draw.rect(hud_surface, (25, 25, 35, 180), self.btn_pause, border_radius=14)
         if paused:
-            pygame.draw.polygon(hud_surface, (255, 255, 255, 220), [(SCREEN_WIDTH - 72, 40), (SCREEN_WIDTH - 72, 66), (SCREEN_WIDTH - 52, 53)])
+            pygame.draw.polygon(hud_surface, (255, 255, 255, 220), [
+                (self.btn_pause.centerx - 8, self.btn_pause.centery - 13),
+                (self.btn_pause.centerx - 8, self.btn_pause.centery + 13),
+                (self.btn_pause.centerx + 12, self.btn_pause.centery),
+            ])
         else:
-            pygame.draw.rect(hud_surface, (255, 255, 255, 220), (SCREEN_WIDTH - 75, 39, 7, 27), border_radius=3)
-            pygame.draw.rect(hud_surface, (255, 255, 255, 220), (SCREEN_WIDTH - 58, 39, 7, 27), border_radius=3)
+            pygame.draw.rect(hud_surface, (255, 255, 255, 220), (self.btn_pause.centerx - 13, self.btn_pause.centery - 13, 7, 27), border_radius=3)
+            pygame.draw.rect(hud_surface, (255, 255, 255, 220), (self.btn_pause.centerx + 4, self.btn_pause.centery - 13, 7, 27), border_radius=3)
 
         surface.blit(hud_surface, (0, 0))
 
@@ -337,22 +370,23 @@ def draw_charge_bar(surface, ship_y, power):
 
 
 def draw_hud(surface, score, lives, level, high_score, state, shield_timer, double_timer, power, ship_y):
+    visible_top, _ = visible_vertical_bounds()
     score_text = HUD_FONT.render(f"SCORE {score}", True, (255, 255, 255))
     high_score_text = HUD_FONT.render(f"BEST {high_score}", True, (125, 214, 255))
     lives_text = HUD_FONT.render("".join("♥" for _ in range(max(0, min(5, lives)))), True, (255, 95, 95))
     level_text = HUD_FONT.render(f"LEVEL {level}", True, (0, 255, 180))
 
-    surface.blit(score_text, (20, 18))
-    surface.blit(high_score_text, (SCREEN_WIDTH - 200, 18))
-    surface.blit(lives_text, (20, 50))
-    surface.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2, 18))
+    surface.blit(score_text, (20, int(visible_top + 18)))
+    surface.blit(high_score_text, (SCREEN_WIDTH - 200, int(visible_top + 18)))
+    surface.blit(lives_text, (20, int(visible_top + 50)))
+    surface.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2, int(visible_top + 18)))
 
     if shield_timer > 0:
         shield_box = FONT.render("SHIELD", True, (120, 220, 255))
-        surface.blit(shield_box, (SCREEN_WIDTH - 160, 58))
+        surface.blit(shield_box, (SCREEN_WIDTH - 160, int(visible_top + 58)))
     if double_timer > 0:
         double_box = FONT.render("2X FIRE", True, (255, 210, 115))
-        surface.blit(double_box, (SCREEN_WIDTH - 160, 82))
+        surface.blit(double_box, (SCREEN_WIDTH - 160, int(visible_top + 82)))
     if state == "playing":
         draw_charge_bar(surface, ship_y, power)
 
@@ -436,10 +470,16 @@ async def main():
         drag_touches.clear()
         touch_directions.clear()
 
+    def clamp_ship_y(value):
+        visible_top, visible_bottom = visible_vertical_bounds()
+        minimum = max(50, int(visible_top + 50))
+        maximum = min(SCREEN_HEIGHT - 60, int(visible_bottom - 60))
+        return max(minimum, min(maximum, value))
+
     def pointer_position(event):
         if event.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
             window_width, window_height = pygame.display.get_window_size()
-            scale = min(window_width / SCREEN_WIDTH, window_height / SCREEN_HEIGHT)
+            scale = max(window_width / SCREEN_WIDTH, window_height / SCREEN_HEIGHT)
             canvas_width = SCREEN_WIDTH * scale
             canvas_height = SCREEN_HEIGHT * scale
             offset_x = (window_width - canvas_width) / 2
@@ -481,24 +521,36 @@ async def main():
     while True:
         dt = clock.tick(FPS)
         title_alpha += dt
+        controls_hud.update_viewport()
 
         if browser_platform is not None:
             portrait_mode = bool(getattr(browser_platform.window, "spaceXPortrait", False))
-            if portrait_mode:
-                if game_state == "playing":
-                    game_state = "paused"
-                if game_state == "paused":
-                    orientation_paused = True
+            if portrait_mode and game_state == "playing":
+                game_state = "paused"
+                orientation_paused = True
+                move_up = False
+                move_down = False
+                fire_held = False
+                charging = False
+                fire_pointer = None
+                mouse_drag = False
+                mouse_move_direction = 0
+                active_touches.clear()
+                drag_touches.clear()
+                touch_directions.clear()
             elif not portrait_mode and orientation_paused:
                 if game_state == "paused":
                     game_state = "playing"
                 orientation_paused = False
-                ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
+                ship_y = clamp_ship_y(ship_y)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+
+            if browser_platform is not None and getattr(browser_platform.window, "spaceXPortrait", False):
+                continue
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -572,14 +624,14 @@ async def main():
                         touch_directions[event.finger_id] = 1
                     elif game_state == "playing" and not is_touch_control_area(pos):
                         drag_touches.add(event.finger_id)
-                        ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
+                        ship_y = clamp_ship_y(pos[1])
 
             if event.type == pygame.FINGERMOTION:
                 pos = pointer_position(event)
                 if event.finger_id in active_touches:
                     active_touches[event.finger_id] = pos
                     if game_state == "playing" and event.finger_id in drag_touches:
-                        ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
+                        ship_y = clamp_ship_y(pos[1])
 
             if event.type == pygame.FINGERUP:
                 active_touches.pop(event.finger_id, None)
@@ -609,11 +661,11 @@ async def main():
                     mouse_move_direction = 1
                 elif game_state == "playing":
                     mouse_drag = True
-                    ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
+                    ship_y = clamp_ship_y(pos[1])
 
             if event.type == pygame.MOUSEMOTION and mouse_drag and game_state == "playing" and not getattr(event, "touch", False):
                 _, pointer_y = pointer_position(event)
-                ship_y = max(50, min(SCREEN_HEIGHT - 60, pointer_y))
+                ship_y = clamp_ship_y(pointer_y)
 
             if event.type == pygame.MOUSEBUTTONUP and not getattr(event, "touch", False):
                 if fire_pointer == "mouse":
@@ -630,7 +682,7 @@ async def main():
             touch_down = any(direction > 0 for direction in touch_directions.values())
             move_delta = int(move_down or touch_down or mouse_move_direction > 0) - int(move_up or touch_up or mouse_move_direction < 0)
             ship_y += move_delta * ship_speed * dt / 1000.0
-            ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
+            ship_y = clamp_ship_y(ship_y)
 
             if charging:
                 power += 0.75
