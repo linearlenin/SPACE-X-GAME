@@ -395,7 +395,6 @@ async def main():
     spawn_timer = 0.0
     level_up_display = 0
     shake_timer = 0
-    fire_repeat = 0.0
     invincible_timer = 0.0
     shield_timer = 0.0
     double_timer = 0.0
@@ -403,13 +402,14 @@ async def main():
     move_down = False
     fire_held = False
     active_touches = {}
+    drag_touches = set()
     touch_directions = {}
     fire_pointer = None
     mouse_drag = False
     mouse_move_direction = 0
 
     def reset_game():
-        nonlocal ship_y, lives, score, level, arrows, targets, particles, powerups, power, charging, spawn_timer, level_up_display, shake_timer, fire_repeat, invincible_timer, shield_timer, double_timer, move_up, move_down, fire_held, fire_pointer, mouse_drag, mouse_move_direction
+        nonlocal ship_y, lives, score, level, arrows, targets, particles, powerups, power, charging, spawn_timer, level_up_display, shake_timer, invincible_timer, shield_timer, double_timer, move_up, move_down, fire_held, fire_pointer, mouse_drag, mouse_move_direction
         ship_y = SCREEN_HEIGHT // 2
         lives = 5
         score = 0
@@ -423,7 +423,6 @@ async def main():
         spawn_timer = 0.0
         level_up_display = 0
         shake_timer = 0
-        fire_repeat = 0.0
         invincible_timer = 0.0
         shield_timer = 0.0
         double_timer = 0.0
@@ -434,6 +433,7 @@ async def main():
         mouse_drag = False
         mouse_move_direction = 0
         active_touches.clear()
+        drag_touches.clear()
         touch_directions.clear()
 
     def pointer_position(event):
@@ -451,15 +451,32 @@ async def main():
         return event.pos
 
     def fire_charged_shot():
-        nonlocal power, charging, fire_held, fire_pointer
+        nonlocal charging, fire_held, fire_pointer
         if charging:
             shot_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
-            arrows.append(LaserArrow(125, ship_y, shot_speed))
-            play_sound(SOUND_SHOOT)
-            power = 0.0
+            shoot(shot_speed)
         charging = False
         fire_held = False
         fire_pointer = None
+
+    def shoot(shot_speed=24.0):
+        nonlocal power
+        if double_timer > 0:
+            arrows.append(LaserArrow(125, ship_y - 10, shot_speed, double_shot=True))
+            arrows.append(LaserArrow(125, ship_y + 10, shot_speed, double_shot=True))
+        else:
+            arrows.append(LaserArrow(125, ship_y, shot_speed))
+        play_sound(SOUND_SHOOT)
+        power = 0.0
+
+    def is_fire_touch_area(pos):
+        return pos[0] >= SCREEN_WIDTH * 0.68 and pos[1] >= SCREEN_HEIGHT * 0.62
+
+    def is_touch_control_area(pos):
+        left_controls = pos[0] <= 180 and pos[1] >= SCREEN_HEIGHT - 250
+        fire_controls = pos[0] >= SCREEN_WIDTH * 0.65 and pos[1] >= SCREEN_HEIGHT * 0.58
+        pause_control = pos[0] >= SCREEN_WIDTH - 120 and pos[1] <= 100
+        return left_controls or fire_controls or pause_control
 
     while True:
         dt = clock.tick(FPS)
@@ -467,11 +484,14 @@ async def main():
 
         if browser_platform is not None:
             portrait_mode = bool(getattr(browser_platform.window, "spaceXPortrait", False))
-            if portrait_mode and game_state == "playing":
-                game_state = "paused"
-                orientation_paused = True
+            if portrait_mode:
+                if game_state == "playing":
+                    game_state = "paused"
+                if game_state == "paused":
+                    orientation_paused = True
             elif not portrait_mode and orientation_paused:
-                game_state = "playing"
+                if game_state == "paused":
+                    game_state = "playing"
                 orientation_paused = False
                 ship_y = max(50, min(SCREEN_HEIGHT - 60, ship_y))
 
@@ -497,6 +517,9 @@ async def main():
                         game_state = "playing"
                     elif game_state == "paused":
                         game_state = "playing"
+                    elif event.key == pygame.K_SPACE and game_state == "playing":
+                        charging = True
+                        fire_held = True
                 elif event.key == pygame.K_p:
                     if game_state == "playing":
                         game_state = "paused"
@@ -507,9 +530,6 @@ async def main():
                         move_up = True
                     if event.key in (pygame.K_s, pygame.K_DOWN):
                         move_down = True
-                    if event.key == pygame.K_SPACE:
-                        fire_held = True
-                        charging = True
                 if event.key == pygame.K_r and game_state == "game_over":
                     reset_game()
                     game_state = "playing"
@@ -523,9 +543,7 @@ async def main():
                     fire_held = False
                     if charging and game_state == "playing":
                         shot_speed = max(18.0, min(36.0, 18.0 + (power * 0.8)))
-                        arrows.append(LaserArrow(125, ship_y, shot_speed))
-                        play_sound(SOUND_SHOOT)
-                        power = 0.0
+                        shoot(shot_speed)
                         charging = False
 
             if event.type == pygame.FINGERDOWN:
@@ -539,7 +557,7 @@ async def main():
                     reset_game()
                     game_state = "playing"
                 else:
-                    if controls_hud.btn_fire.collidepoint(pos):
+                    if controls_hud.btn_fire.collidepoint(pos) or is_fire_touch_area(pos):
                         charging = True
                         fire_held = True
                         fire_pointer = event.finger_id
@@ -552,18 +570,20 @@ async def main():
                         touch_directions[event.finger_id] = -1
                     elif controls_hud.btn_down.collidepoint(pos):
                         touch_directions[event.finger_id] = 1
-                    elif game_state == "playing":
+                    elif game_state == "playing" and not is_touch_control_area(pos):
+                        drag_touches.add(event.finger_id)
                         ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
 
             if event.type == pygame.FINGERMOTION:
                 pos = pointer_position(event)
                 if event.finger_id in active_touches:
                     active_touches[event.finger_id] = pos
-                    if game_state == "playing" and event.finger_id != fire_pointer and event.finger_id not in touch_directions:
+                    if game_state == "playing" and event.finger_id in drag_touches:
                         ship_y = max(50, min(SCREEN_HEIGHT - 60, pos[1]))
 
             if event.type == pygame.FINGERUP:
                 active_touches.pop(event.finger_id, None)
+                drag_touches.discard(event.finger_id)
                 touch_directions.pop(event.finger_id, None)
                 if event.finger_id == fire_pointer:
                     fire_charged_shot()
@@ -606,7 +626,6 @@ async def main():
         if game_state == "playing":
             frame_scale = dt / (1000.0 / FPS)
             ship_speed = 480.0
-            keys = pygame.key.get_pressed()
             touch_up = any(direction < 0 for direction in touch_directions.values())
             touch_down = any(direction > 0 for direction in touch_directions.values())
             move_delta = int(move_down or touch_down or mouse_move_direction > 0) - int(move_up or touch_up or mouse_move_direction < 0)
@@ -617,18 +636,6 @@ async def main():
                 power += 0.75
                 if power > 20.0:
                     power = 20.0
-
-            if keys[pygame.K_SPACE]:
-                fire_repeat += dt
-                if fire_repeat >= 150:
-                    shot_speed = 24.0
-                    if double_timer > 0:
-                        arrows.append(LaserArrow(125, ship_y - 10, shot_speed, double_shot=True))
-                        arrows.append(LaserArrow(125, ship_y + 10, shot_speed, double_shot=True))
-                    else:
-                        arrows.append(LaserArrow(125, ship_y, shot_speed))
-                    play_sound(SOUND_SHOOT)
-                    fire_repeat = 0.0
 
             spawn_interval = max(1400, 2600 - level * 100)
             spawn_timer += dt

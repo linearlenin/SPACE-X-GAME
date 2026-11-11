@@ -165,13 +165,10 @@ CUSTOM_CSS = """
         object-fit: contain !important;
         z-index: 5;
         padding: 0;
-        margin: 0 auto;
+        margin: auto;
         position: fixed !important;
-        top: 50% !important;
-        bottom: auto !important;
-        left: 50% !important;
-        right: auto !important;
-        transform: translate(-50%, -50%) !important;
+        inset: 0 !important;
+        transform: none !important;
     }
 </style>
 <!-- SPACE_X_CUSTOM_CSS_END -->
@@ -194,78 +191,85 @@ CUSTOM_SCRIPT = """
     (function () {
         const loader = document.getElementById('game-loading-shell');
         const rotateWarning = document.getElementById('rotate-warning');
-        let resizeFrame = 0;
-        let lastViewport = '';
+        let resizeTimer = 0;
 
         function resizeCanvas() {
             const viewport = window.visualViewport;
             const width = Math.max(1, viewport ? viewport.width : window.innerWidth);
             const height = Math.max(1, viewport ? viewport.height : window.innerHeight);
-            const portrait = width <= height;
+            const landscape = window.innerWidth > window.innerHeight &&
+                window.matchMedia('(orientation: landscape)').matches;
             const canvas = document.getElementById('canvas');
-            const viewportKey = Math.round(width) + 'x' + Math.round(height);
 
-            window.spaceXPortrait = portrait;
+            window.spaceXPortrait = !landscape;
             if (rotateWarning) {
-                rotateWarning.style.display = portrait ? 'flex' : 'none';
+                rotateWarning.style.display = landscape ? 'none' : 'flex';
             }
-            if (canvas && viewportKey !== lastViewport) {
-                lastViewport = viewportKey;
+            if (canvas) {
                 const scale = Math.min(width / 1280, height / 720);
                 canvas.style.setProperty('width', Math.round(1280 * scale) + 'px', 'important');
                 canvas.style.setProperty('height', Math.round(720 * scale) + 'px', 'important');
-                canvas.style.setProperty('left', (width / 2) + 'px', 'important');
-                canvas.style.setProperty('top', (height / 2) + 'px', 'important');
             }
         }
 
         function scheduleResize() {
-            if (resizeFrame) cancelAnimationFrame(resizeFrame);
-            resizeFrame = requestAnimationFrame(function () {
-                resizeFrame = 0;
-                resizeCanvas();
-            });
-        }
-
-        function settleOrientation() {
-            scheduleResize();
-            [100, 300, 700].forEach(function (delay) {
-                setTimeout(scheduleResize, delay);
-            });
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(resizeCanvas, 150);
         }
 
         window.addEventListener('resize', scheduleResize);
-        window.addEventListener('orientationchange', settleOrientation);
+        window.addEventListener('orientationchange', scheduleResize);
         window.addEventListener('pageshow', scheduleResize);
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', scheduleResize);
         }
         if (window.screen && window.screen.orientation &&
                 typeof window.screen.orientation.addEventListener === 'function') {
-            window.screen.orientation.addEventListener('change', settleOrientation);
+            window.screen.orientation.addEventListener('change', scheduleResize);
         }
-        if (typeof ResizeObserver === 'function') {
-            new ResizeObserver(scheduleResize).observe(document.documentElement);
-        }
-        setInterval(scheduleResize, 500);
         resizeCanvas();
+        setInterval(function () {
+            const landscape = window.innerWidth > window.innerHeight &&
+                window.matchMedia('(orientation: landscape)').matches;
+            if (window.spaceXPortrait === landscape) {
+                resizeCanvas();
+            }
+        }, 250);
 
-        function tryLockLandscape() {
-            const orientation = window.screen && window.screen.orientation;
-            if (!orientation || typeof orientation.lock !== 'function') return;
-            try {
-                const result = orientation.lock('landscape');
-                if (result && typeof result.catch === 'function') {
-                    result.catch(function (error) {
-                        console.debug('Landscape orientation lock unavailable:', error);
-                    });
-                }
-            } catch (error) {
-                console.debug('Landscape orientation lock unavailable:', error);
+        document.addEventListener('keydown', function (event) {
+            if (event.code === 'Space' || event.key === ' ') {
+                event.preventDefault();
+            }
+        }, { capture: true });
+        document.addEventListener('keyup', function (event) {
+            if (event.code === 'Space' || event.key === ' ') {
+                event.preventDefault();
+            }
+        }, { capture: true });
+
+        function isFireButtonTouch(event) {
+            const canvas = document.getElementById('canvas');
+            const touch = event.changedTouches[0] || event.touches[0];
+            if (!canvas || !touch) return false;
+            const bounds = canvas.getBoundingClientRect();
+            if (!bounds.width || !bounds.height) return false;
+            const x = (touch.clientX - bounds.left) * 1280 / bounds.width;
+            const y = (touch.clientY - bounds.top) * 720 / bounds.height;
+            return x >= 1280 * 0.68 && y >= 720 * 0.62;
+        }
+
+        const gameCanvas = document.getElementById('canvas');
+        function preventCanvasTouchDefault(event) {
+            event.preventDefault();
+            if (isFireButtonTouch(event)) {
+                event.stopPropagation();
             }
         }
 
-        document.addEventListener('pointerdown', tryLockLandscape, { once: true, passive: true });
+        if (gameCanvas) {
+            gameCanvas.addEventListener('touchstart', preventCanvasTouchDefault, { passive: false });
+            gameCanvas.addEventListener('touchend', preventCanvasTouchDefault, { passive: false });
+        }
 
         const hideLoader = function () {
             if (!loader) return;
